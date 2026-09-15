@@ -62,6 +62,8 @@ def main(profile, port=8777):
         checks.append('raw evidence retained under details')
         page.screenshot(path=str(root/'outputs'/'数据分类-桌面.png'),full_page=True)
         page.locator('[data-action="filter-category"][data-id=""]').click()
+        # Category rendering replaces the filter form; wait before editing that form.
+        expect(page.locator('[data-action="filter-category"][data-id=""]')).to_have_attribute('aria-pressed','true')
         page.locator('[name=batch]').select_option('legacy')
         page.get_by_role('button',name='查询',exact=True).click()
         legacy_count=next(b['records'] for b in latest['batches'] if b['run_id']=='legacy')
