@@ -13,6 +13,8 @@ def api(tmp_path):
 def test_brand_and_assets(api):
     client, _ = api
     assert client.get('/api/health').json()['name'] == 'JM工作台'
+    assert client.get('/api/health').json()['app_id'] == 'jm-workbench'
+    assert 'charset=utf-8' in client.get('/api/health').headers['Content-Type']
     assert '<title>JM工作台</title>' in client.get('/').text
     for asset in ('app.js', 'views.js', 'ui.js', 'style.css'):
         assert client.get('/static/'+asset).status_code == 200

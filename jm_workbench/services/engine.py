@@ -58,6 +58,7 @@ class Engine:
         try:
             if revision() != self.cfg.code_revision:
                 self.store.stop()
+                self.shutdown.set()
                 return False
             now = self.clock()
             with self.store.connect(True) as db:

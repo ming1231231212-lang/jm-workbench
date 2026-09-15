@@ -1,3 +1,54 @@
 <!doctype html>
-<html lang="zh-CN"><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>JM工作台</title><link rel="stylesheet" href="/static/style.css"></head>
-<body><div class="shell"><aside class="sidebar"><a class="brand" href="#overview"><span class="brand-mark">JM</span><span>JM工作台<small>让每项任务有条不紊</small></span></a><div class="nav-label">工作空间</div><nav aria-label="主导航" id="nav"></nav><div class="sidebar-bottom"><span class="status-dot"></span> 本机运行 · 数据保存在本地<small id="version">正在连接服务</small></div></aside><main><header class="topbar"><div class="breadcrumb">我的工作空间 <span>/</span> <strong id="page-label">工作概览</strong></div><div class="top-actions"><button class="button quiet" data-action="refresh" title="刷新数据">↻ 刷新</button><button class="button" data-action="stop">Ⅱ 停止全部</button><button class="button primary" data-action="launch">▷ 一键执行</button></div></header><div class="content" id="content"><div class="empty">正在连接JM工作台…</div></div><footer>JM工作台 <span>配置 → 绑定账号 → 一键执行 → 查看结果</span></footer></main></div><div id="toast" role="status" aria-live="polite" hidden></div><dialog id="dialog" aria-labelledby="dialog-title"><div id="dialog-content"></div></dialog><script type="module" src="/static/app.js"></script></body></html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width,initial-scale=1" />
+    <title>JM工作台</title>
+    <link rel="stylesheet" href="/static/style.css" />
+  </head>
+  <body>
+    <div class="shell">
+      <aside class="sidebar">
+        <a class="brand" href="#overview"
+          ><span class="brand-mark">JM</span
+          ><span>JM工作台<small>让每项任务有条不紊</small></span></a
+        >
+        <div class="nav-label">工作空间</div>
+        <nav aria-label="主导航" id="nav"></nav>
+        <div class="sidebar-bottom">
+          <span class="status-dot"></span> 本机运行 · 数据保存在本地<small
+            id="version"
+            >正在连接服务</small
+          >
+        </div>
+      </aside>
+      <main>
+        <header class="topbar">
+          <div class="breadcrumb">
+            我的工作空间 <span>/</span>
+            <strong id="page-label">工作概览</strong>
+          </div>
+          <div class="top-actions">
+            <button class="button quiet" data-action="refresh" title="刷新数据">
+              ↻ 刷新</button
+            ><button class="button" data-action="stop">Ⅱ 停止全部</button
+            ><button class="button primary" data-action="launch">
+              ▷ 一键执行
+            </button>
+          </div>
+        </header>
+        <div class="content" id="content">
+          <div class="empty">正在连接JM工作台…</div>
+        </div>
+        <footer>
+          JM工作台 <span>配置 → 绑定账号 → 一键执行 → 查看结果</span>
+        </footer>
+      </main>
+    </div>
+    <div id="toast" role="status" aria-live="polite" hidden></div>
+    <dialog id="dialog" aria-labelledby="dialog-title">
+      <div id="dialog-content"></div>
+    </dialog>
+    <script type="module" src="/static/app.js"></script>
+  </body>
+</html>

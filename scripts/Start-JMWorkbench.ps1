@@ -1,4 +1,4 @@
-param([int]$Port = 8776, [switch]$NoBrowser)
+﻿param([int]$Port = 8776, [switch]$NoBrowser)
 $ErrorActionPreference = 'Stop'
 $jmProject = Split-Path -Parent $PSScriptRoot
 $jmPython = Join-Path $jmProject '.venv\Scripts\python.exe'
@@ -12,7 +12,7 @@ try {
     $jmRunning = $false
     try {
         $jmHealth = Invoke-RestMethod -Uri ($jmUrl + '/api/health') -TimeoutSec 3
-        if ($jmHealth.name -ne 'JM工作台') { throw '端口由其他应用占用。' }
+        if ($jmHealth.app_id -ne 'jm-workbench') { throw '端口由其他应用占用。' }
         if ($jmHealth.revision -ne $jmRevision) { throw '已有JM服务加载的是旧代码，请先停止任务并重启服务。' }
         $jmRunning = $true
     } catch {
@@ -24,7 +24,7 @@ try {
             Start-Sleep -Milliseconds 500
             try {
                 $jmHealth = Invoke-RestMethod -Uri ($jmUrl + '/api/health') -TimeoutSec 2
-                if ($jmHealth.name -eq 'JM工作台') { $jmRunning = $true; break }
+                if ($jmHealth.app_id -eq 'jm-workbench') { $jmRunning = $true; break }
             } catch { }
         }
         if (-not $jmRunning) { throw 'JM启动失败，请查看var/server.stderr.log。' }

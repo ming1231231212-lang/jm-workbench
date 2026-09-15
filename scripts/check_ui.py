@@ -1,8 +1,10 @@
 """Real Chrome UI acceptance against an explicitly disabled-worker instance."""
 import json
 import sys
+import time
+import urllib.request
 from pathlib import Path
-from playwright.sync_api import sync_playwright
+from playwright.sync_api import sync_playwright, expect
 from jm_workbench.adapters.chrome import endpoint
 
 def main():
@@ -10,6 +12,15 @@ def main():
     base='http://127.0.0.1:8777'
     profile=sys.argv[1]
     result={'checks':[], 'console_errors':[]}
+    opener=urllib.request.build_opener(urllib.request.ProxyHandler({}))
+    for attempt in range(20):
+        try:
+            with opener.open(base+'/api/health',timeout=1) as response:
+                assert json.load(response)['worker'] is False
+            break
+        except OSError:
+            if attempt==19:raise
+            time.sleep(.5)
     with sync_playwright() as pw:
         browser=pw.chromium.connect_over_cdp(endpoint(profile),timeout=30000)
         context=browser.contexts[0]
@@ -61,6 +72,9 @@ def main():
         main=page.locator('.account-card').filter(has=page.get_by_role('heading',name='快手主账号',exact=True))
         main.get_by_role('button',name='检查连接',exact=True).click()
         page.get_by_text('登录已核验',exact=True).wait_for(timeout=45000)
+        # An already verified account has the same badge before this request.
+        # Wait for the asynchronous check AND refresh to release the action button.
+        expect(main.get_by_role('button',name='检查连接',exact=True)).to_be_enabled(timeout=45000)
         result['checks'].append('actual selected Chrome account check via fetch without deadlock')
         page.locator('.topbar [data-action="launch"]').click()
         page.get_by_role('status').filter(has_text='已加入').wait_for(timeout=15000)
@@ -85,6 +99,7 @@ def main():
         result['checks'].append('CSV downloaded')
         page.locator('#nav a[href="#overview"]').click()
         page.get_by_role('heading',name='工作概览',exact=True).wait_for()
+        page.locator('#toast').evaluate('(el)=>el.hidden=true')
         page.screenshot(path=str(root/'outputs'/'JM桌面验收.png'),full_page=True)
         page.set_viewport_size({'width':390,'height':844})
         for slug,title in [('overview','工作概览'),('matrix','任务矩阵'),('tasks','任务配置'),('accounts','账号管理'),('platforms','平台接入'),('data','数据中心'),('runs','运行记录'),('settings','工作台设置')]:

@@ -10,3 +10,16 @@
 ## 工具选取
 planning-with-files记录持续计划；brainstorming梳理架构；find-skills完成本地目录与skills.sh检索；frontend-design仅使用已检查的通用设计说明，无需调用OpenClaw Agent。
 执行工具：FastAPI/Pydantic、SQLite、Playwright/Chrome、pytest、Node自检、Git/gh。GitHub以当前已登录账户创建私有仓库，在交付阶段执行。
+# JM集成发现与处理
+
+- 原工作台绑定固定Chrome目录与端口；新账号通过各自资料目录的DevToolsActivePort验证准确WebSocket，不复用全局端口。
+- 原生表单导航会与同一Chrome的CDP连接等待互相阻塞；新UI全部通过JSON/fetch交互。真实账号检查按钮已实测通过。
+- 原陪玩入口是18+招聘，区别于成人尾货收购；两条业务分别配置正文规则和模板，不共享受众判断。
+- 原爬虫单条评论采集上限曾被改为94,415、存在旧Cookie覆盖和内部重试；JM为每个子进程注入有限配置，排除旧Cookie覆盖，并在限制状态前中断。
+- 快手基础内容采集直接使用准确关键词页面结果；其他平台与快手评论采集保留外部爬虫适配器。
+- 原爬虫是独立许可证项目，JM不打包上游源码或登录环境，外部使用权保持原有条件。
+- 代码组织为core、adapters、policies、services、web；前端已用Prettier统一格式，无构建依赖。
+- 数据迁移已导入247条候选和354条旧接触记录，原库未移动；迁入候选不是发布许可。
+- 实际快手只读验收：账号身份核验通过，准确关键词结果10条，新评论尝试0条。
+- 旧成人launch/guard/wrap和F6调用已集中到JM观察入口；旧调用不会自动开启矩阵或直接发送。
+- 现存其他平台没有逐一登录验证，不能把依赖导入成功表述成7个平台在线测试全部通过。

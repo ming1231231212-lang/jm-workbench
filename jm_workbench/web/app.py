@@ -55,6 +55,8 @@ def create_app(home=None, worker=True, configuration=None):
         response.headers['X-Content-Type-Options'] = 'nosniff'
         response.headers['Content-Security-Policy'] = "default-src 'self'; script-src 'self'; style-src 'self'; img-src 'self' data:; connect-src 'self'; frame-ancestors 'none'; base-uri 'none'; form-action 'self'"
         response.headers['Cache-Control'] = 'no-store'
+        if response.headers.get('content-type', '').startswith('application/json'):
+            response.headers['Content-Type'] = 'application/json; charset=utf-8'
         return response
 
     @app.exception_handler(ValueError)
@@ -69,7 +71,7 @@ def create_app(home=None, worker=True, configuration=None):
 
     @app.get('/api/health')
     def health():
-        return {'name': APP_NAME, 'version': __version__, 'revision': cfg.code_revision, 'worker': worker}
+        return {'app_id': 'jm-workbench', 'name': APP_NAME, 'version': __version__, 'revision': cfg.code_revision, 'worker': worker}
 
     @app.get('/api/state')
     def state():

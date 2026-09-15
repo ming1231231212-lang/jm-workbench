@@ -28,3 +28,16 @@ def test_kuaishou_normal_search_adapter(tmp_path,monkeypatch):
 def test_legacy_rate_limit_code_stops_before_internal_retry():
     assert response_risk(200,{'result':2})
     assert response_risk(200,{'result':50})
+
+@pytest.mark.parametrize('text,iframe,risk',[('请通过验证',0,True),('欢迎登录，获取验证码',0,False),('正常页面',1,True)])
+def test_challenge_is_distinct_from_normal_login(text,iframe,risk):
+    import asyncio
+    from jm_workbench.adapters.crawler_child import check_challenge, GuardStop
+    class Locator:
+        async def inner_text(self,**kwargs):return text
+        async def count(self):return iframe
+    class Page:
+        def locator(self,_):return Locator()
+    if risk:
+        with pytest.raises(GuardStop):asyncio.run(check_challenge(Page()))
+    else:asyncio.run(check_challenge(Page()))

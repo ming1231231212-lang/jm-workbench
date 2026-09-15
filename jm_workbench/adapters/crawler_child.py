@@ -6,6 +6,7 @@ import os
 import sys
 import time
 from pathlib import Path
+from urllib.parse import urlparse
 
 
 class GuardStop(BaseException):
@@ -21,7 +22,7 @@ class LoginRequired(BaseException):
 
 
 def response_risk(status, data):
-    if status in (401, 403, 429, 461, 471):
+    if status in (401, 403, 412, 418, 429, 461, 471):
         return f'平台返回 HTTP {status}，任务已停止'
     if isinstance(data, dict):
         message = ' '.join(str(data.get(k, '')) for k in ('msg', 'message', 'error_msg', 'errors'))
@@ -30,6 +31,14 @@ def response_risk(status, data):
         if data.get('result') in (2, 50, 400002, 400001) or data.get('code') in (-100, 300012, -102):
             return '平台返回访问限制状态，任务已停止'
     return ''
+
+
+async def check_challenge(page):
+    text = await page.locator('body').inner_text(timeout=5000)
+    if any(word in text for word in ('操作频繁', '访问过于频繁', '请通过验证', '拖动滑块', '完成安全验证', '账号异常', '账号被封禁', '访问受限', '网络环境存在风险')):
+        raise GuardStop('页面要求安全验证或限制访问，停止同平台任务')
+    if await page.locator('iframe[src*="captcha"], iframe[src*="verify"], #captcha-verify-image').count():
+        raise GuardStop('页面出现安全验证，停止同平台任务')
 
 
 async def execute(p):
@@ -64,6 +73,8 @@ async def execute(p):
     captured, contexts = [], []
     counts, last_request, request_count = {}, 0., 0
     page_risk = []
+    platform_domain = {'ks':'kuaishou.com','dy':'douyin.com','xhs':'xiaohongshu.com',
+                       'bili':'bilibili.com','wb':'weibo.com','tieba':'baidu.com','zhihu':'zhihu.com'}[p['platform']]
     original_request = httpx.AsyncClient.request
     original_init = httpx.AsyncClient.__init__
 
@@ -77,6 +88,10 @@ async def execute(p):
         nonlocal last_request, request_count
         if page_risk:
             raise GuardStop(page_risk[0])
+        for context in contexts:
+            pages = [page for page in context.pages if (urlparse(page.url).hostname or '').endswith('.'+platform_domain) or urlparse(page.url).hostname == platform_domain]
+            if pages:
+                await check_challenge(pages[-1])
         request_count += 1
         if request_count > 40:
             raise LimitReached('已达到单批请求上限')
@@ -105,7 +120,8 @@ async def execute(p):
             raise LoginRequired('账号浏览器没有可用窗口')
         self.browser_context = self.browser.contexts[0]
         def watch(response):
-            if response.request.resource_type in ('document','xhr','fetch'):
+            host = urlparse(response.url).hostname or ''
+            if (host == platform_domain or host.endswith('.'+platform_domain)) and response.request.resource_type in ('document','xhr','fetch'):
                 reason = response_risk(response.status, {})
                 if reason:
                     page_risk.append(reason)
@@ -121,6 +137,8 @@ async def execute(p):
         raise LoginRequired('请在账号浏览器完成登录；不导入其他来源Cookie')
 
     async def manual_login(self, *args, **kwargs):
+        if getattr(self, 'context_page', None):
+            await check_challenge(self.context_page)
         raise LoginRequired('平台登录尚未有效，请在该账号浏览器登录后重新检查')
 
     async def capture(self, item, item_type):
