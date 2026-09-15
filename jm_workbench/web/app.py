@@ -16,6 +16,7 @@ from ..core.models import AccountInput, TaskInput, BindingInput, SettingsInput, 
 from ..core.platforms import PLATFORMS
 from ..services.configuration import Configuration
 from ..services.engine import Engine
+from ..services.data_view import data_view
 from ..adapters.errors import LocalBrowserError, PlatformRisk
 from ..policies.rules import DEFAULTS
 
@@ -151,20 +152,8 @@ def create_app(home=None, worker=True, configuration=None):
         return {'message': '限制记录已解除，任务保持停止；可重新一键执行'}
 
     @app.get('/api/data')
-    def data(q: str = '', decision: str = '', page: int = 1):
-        page = max(1, page)
-        where, args = 'WHERE 1=1', []
-        if q:
-            where += " AND data LIKE ? ESCAPE '\\'"
-            args.append('%'+q[:100].replace('\\','\\\\').replace('%','\\%').replace('_','\\_')+'%')
-        if decision:
-            where += ' AND decision=?'
-            args.append(decision)
-        total = store.rows('SELECT COUNT(*) n FROM evidence '+where, args)[0]['n']
-        rows = store.rows('SELECT * FROM evidence '+where+' ORDER BY id DESC LIMIT 30 OFFSET ?', args+[(page-1)*30])
-        for row in rows:
-            row['data'] = json.loads(row['data'])
-        return {'items': rows, 'total': total, 'page': page}
+    def data(q: str = '', decision: str = '', page: int = 1, batch: str = 'all', category: str = ''):
+        return data_view(store, q=q[:200], decision=decision, page=page, batch=batch, category=category)
 
     @app.get('/api/attempts')
     def attempts():
@@ -178,10 +167,12 @@ def create_app(home=None, worker=True, configuration=None):
     def export():
         content = io.StringIO(newline='')
         writer = csv.writer(content)
-        writer.writerow(['平台','视频ID','作者ID','正文','判断','原因','时间'])
+        writer.writerow(['平台','视频ID','作者ID','正文','执行判断','原因','时间','业务分类','分类说明'])
+        from ..services.data_view import classify, CATEGORIES
         for row in store.rows('SELECT * FROM evidence ORDER BY id'):
             item = json.loads(row['data'])
-            cells = [row['platform'], row['video_id'], row['author_id'], item.get('caption', item.get('title', item.get('content',''))), row['decision'], row['reason'], row['created']]
+            category, reason = classify(item)
+            cells = [row['platform'], row['video_id'], row['author_id'], item.get('caption', item.get('title', item.get('content',''))), row['decision'], row['reason'], row['created'], CATEGORIES[category], reason]
             writer.writerow(["'"+str(v) if str(v).lstrip().startswith(('=','+','-','@','\t','\r')) else v for v in cells])
         return Response('\ufeff'+content.getvalue(), media_type='text/csv; charset=utf-8',
                         headers={'Content-Disposition': 'attachment; filename="jm-data.csv"'})
