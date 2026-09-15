@@ -64,3 +64,18 @@ def test_unknown_send_cannot_clear_risk(api):
     result=client.post('/api/risk/ks/clear',json={'note':'我已经完成平台问题处理并检查浏览器'})
     assert result.status_code==400
     assert cfg.store.rows('SELECT * FROM risk')
+
+
+def test_comment_scope_and_core_roundtrip_and_read_only_preview(api):
+    from jm_workbench.policies.comments import ADULT_CORE
+    client,cfg=api
+    payload=dict(name='成人商家',platform='ks',kind='adult_comments',keywords=['成人用品店'],
+                 adult_target='merchant',comment_mode='core_variants',comment_core=ADULT_CORE)
+    preview=client.post('/api/comment-preview',json=payload)
+    assert preview.status_code==200 and len(preview.json()['examples'])==3
+    assert cfg.store.objects('task')==[] and cfg.store.rows('SELECT * FROM attempts')==[]
+    created=client.post('/api/tasks',json=payload).json()
+    assert created['comment_core']==ADULT_CORE and created['adult_target']=='merchant'
+    changed=client.put('/api/tasks/'+created['id'],json=dict(payload,adult_target='inventory')).json()
+    assert changed['adult_target']=='inventory' and changed['version']==2
+    assert client.post('/api/comment-preview',json=dict(payload,kind='peiwang_comments')).status_code==422

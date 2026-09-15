@@ -3,7 +3,8 @@ import json
 import re
 import time
 from collections import Counter
-from ..policies.rules import assess, detail_ready
+from ..policies.rules import assess, assess_item, detail_ready
+from ..policies.comments import candidates, examples, target_description
 from .guard import comment_due, contact_reason
 
 CATEGORIES = {
@@ -32,6 +33,8 @@ def classify(item):
     # A media-name hint can exclude a record, but a shop-name hint cannot approve one.
     if any(w in caption for w in discussion) or (media_hint and len(caption.strip()) > 5):
         return 'discussion', '内容偏新闻、招商或行业讨论，发视频的人不等于报道中的持货店主'
+    if assess('adult_comments', caption, 'merchant')[0]:
+        return 'merchant', '正文明确成人用品及自家经营；当前库存和处置意愿尚未确认'
     merchant = re.search(r'本店|我们店|我的店|开店日常|老板娘日常|守店|实体店|诚信经营|无套路经营|口碑店|批发|厂家|库存|清仓', caption)
     name_hint = re.search(r'旗舰店|成人|情趣|用品|小商品城', nickname)
     if merchant or name_hint:
@@ -73,23 +76,24 @@ def combine(rows):
 def preview(store, row, tasks, now):
     item = row['data']
     caption = str(item.get('caption') or item.get('title') or item.get('desc') or '')
-    evaluations = {kind: assess(kind, caption) for kind in ('adult_comments', 'peiwang_comments')}
-    kind = next((k for k, (ok, _) in evaluations.items() if ok), None)
-    if item.get('record_type') == 'comments' or item.get('comment_id'):
-        kind = None
+    configured = [t for t in tasks if t['kind'] != 'crawler' and t['platform'] == row['platform'] and t['enabled']]
+    applicable = [t for t in configured if assess_item(t, item)[0]]
+    kind = applicable[0]['kind'] if applicable else None
+    if not configured:
+        kind = next((k for k in ('adult_comments', 'peiwang_comments') if assess_item({'kind': k}, item)[0]), None)
     base = {'content_match': bool(kind), 'templates': [], 'task_names': [], 'business': kind or '', 'label': '不会评论', 'status': 'not_matched'}
     if not kind:
-        return dict(base, reason='正文未通过任一评论业务规则；门店昵称、搜索词和业务分类不能代替正文证据')
-    applicable = [t for t in tasks if t['kind'] == kind and t['platform'] == row['platform'] and t['enabled']]
+        reasons = list(dict.fromkeys(assess_item(t, item)[1] for t in configured))
+        return dict(base, reason='；'.join(reasons) + '。昵称、搜索词和分类不能代替经营正文证据')
     base['task_names'] = [t['name'] for t in applicable]
-    base['templates'] = list(dict.fromkeys(text for t in applicable for text in t['templates']))
+    base['templates'] = list(dict.fromkeys(text for t in applicable for text in candidates(t, item)))
     if not applicable:
         return dict(base, status='unconfigured', label='未配置对应任务', reason='内容初筛通过，但没有启用的同平台评论任务')
     with store.connect() as db:
         for table in ('attempts', 'history'):
             if db.execute(f'SELECT 1 FROM {table} WHERE platform=? AND video_id=?', (row['platform'], row['video_id'])).fetchone():
                 return dict(base, status='contacted', label='已有接触记录', reason='此视频已尝试联系，系统不会再次发送')
-    ready, reason = detail_ready(kind, item)
+    ready = any(detail_ready(t['kind'], item, t.get('adult_target', 'inventory'))[0] for t in applicable)
     if not ready or not 0 <= now - (item.get('observed_at') or 0) <= 120:
         return dict(base, status='needs_detail', label='待详情核验', reason='正文初筛通过；须重新读取准确视频详情，核验作者、评论权限和时效')
     if store.rows('SELECT 1 FROM risk WHERE platform=?', (row['platform'],)):
@@ -133,7 +137,9 @@ def data_view(store, q='', decision='', page=1, batch='all', category='', now=No
     for entry in batches:
         entry['name'] = '历史迁入' if entry['run_id'] == 'legacy' else run_names.get(entry['run_id'], '只读采集批次')
     templates = [{'task_id': t['id'], 'name': t['name'], 'platform': t['platform'], 'kind': t['kind'],
-                  'enabled': t['enabled'], 'templates': t['templates'], 'start_hour': t['start_hour'],
+                  'enabled': t['enabled'], 'templates': examples(t), 'comment_mode': t.get('comment_mode', 'templates'),
+                  'comment_core': t.get('comment_core', ''), 'target_description': target_description(t),
+                  'adult_target': t.get('adult_target', 'inventory'), 'start_hour': t['start_hour'],
                   'end_hour': t['end_hour']} for t in tasks if t['kind'] != 'crawler']
     return {'items': filtered[(page-1)*30:page*30], 'total': total, 'page': page, 'summary': summary,
             'batches': batches, 'selected_batch': selected, 'requested_batch': batch,

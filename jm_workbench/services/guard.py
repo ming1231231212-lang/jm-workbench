@@ -3,6 +3,7 @@ import time
 from datetime import datetime, timedelta, timezone
 from ..core.db import dumps, uid
 from ..policies.rules import detail_ready, validate_template
+from ..policies.comments import candidates
 
 CN = timezone(timedelta(hours=8))
 
@@ -55,10 +56,12 @@ def contact_reason(db, platform, item, text, now):
 
 def reserve(store, run, item, text, now):
     task, account = run['snapshot']['task'], run['snapshot']['account']
-    ok, reason = detail_ready(task['kind'], item)
+    ok, reason = detail_ready(task['kind'], item, task.get('adult_target', 'inventory'))
     if not ok:
         raise ValueError(reason)
     validate_template(task['kind'], text)
+    if task.get('comment_mode') == 'core_variants' and text not in candidates(task, item):
+        raise ValueError('文案与该视频的核心句生成结果不一致')
     if not 0 <= now - item.get('observed_at', 0) <= 120:
         raise ValueError('详情证据已过期')
     if item['author_id'] == account['identity']:

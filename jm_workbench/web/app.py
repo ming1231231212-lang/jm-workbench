@@ -19,6 +19,7 @@ from ..services.engine import Engine
 from ..services.data_view import data_view
 from ..adapters.errors import LocalBrowserError, PlatformRisk
 from ..policies.rules import DEFAULTS
+from ..policies.comments import examples, target_description, ADULT_CORE
 
 
 def create_app(home=None, worker=True, configuration=None):
@@ -87,7 +88,7 @@ def create_app(home=None, worker=True, configuration=None):
                 'runs': runs, 'risk': store.rows('SELECT * FROM risk'), 'counts': counts, 'attempt_counts': attempts,
                 'history_count': store.rows('SELECT COUNT(*) n FROM history')[0]['n'],
                 'platforms': [{'id': k, **v, 'crawler': k == 'ks' or config.crawler_ready(), 'verification': '待该平台登录实测'} for k, v in PLATFORMS.items()],
-                'settings': config.values, 'defaults': DEFAULTS,
+                'settings': config.values, 'defaults': DEFAULTS, 'adult_comment_core': ADULT_CORE,
                 'events': store.rows('SELECT * FROM events ORDER BY id DESC LIMIT 50')}
 
     @app.post('/api/accounts')
@@ -110,6 +111,12 @@ def create_app(home=None, worker=True, configuration=None):
     @app.post('/api/tasks')
     def add_task(payload: TaskInput):
         return cfg.task(payload.model_dump())
+
+    @app.post('/api/comment-preview')
+    def comment_preview(payload: TaskInput):
+        task = payload.model_dump()
+        return {'examples': examples(task), 'target_description': target_description(task),
+                'mode': task['comment_mode']}
 
     @app.put('/api/tasks/{ident}')
     def edit_task(ident: str, payload: TaskInput):

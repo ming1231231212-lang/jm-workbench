@@ -89,3 +89,18 @@ def test_reading_view_never_changes_execution_state(store):
     data_view(store)
     assert store.rows('SELECT * FROM evidence')==before
     assert not store.rows('SELECT * FROM attempts') and not store.rows('SELECT * FROM runs')
+
+
+def test_preview_obeys_scope_and_generated_comment_for_exact_video(store):
+    from jm_workbench.policies.comments import ADULT_CORE, candidates
+    task=next(t for t in store.objects('task') if t['kind']=='adult_comments')
+    add(store,'video12345','本店成人用品正常营业')
+    assert not data_view(store)['items'][0]['comment_preview']['content_match']
+    task=store.put('task',dict(task,adult_target='merchant',comment_mode='core_variants',comment_core=ADULT_CORE),task['id'])
+    result=data_view(store)
+    row=result['items'][0]
+    assert row['category']=='merchant'
+    assert row['comment_preview']['label']=='待详情核验'
+    assert row['comment_preview']['templates']==candidates(task,row['data'])
+    assert len(result['comment_templates'][0]['templates'])==3
+    assert result['comment_templates'][0]['comment_core']==ADULT_CORE

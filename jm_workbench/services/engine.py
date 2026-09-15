@@ -6,7 +6,8 @@ from ..core.db import dumps
 from ..core.instance import InstanceLock
 from ..adapters.crawler import Crawler
 from ..adapters.errors import Cancelled, LocalBrowserError, PlatformRisk
-from ..policies.rules import assess, detail_ready
+from ..policies.rules import assess_item, detail_ready
+from ..policies.comments import candidates
 from .guard import read_slot, comment_due, reserve, finish, contact_reason, recover
 
 
@@ -126,7 +127,7 @@ class Engine:
                 rows = browser.search(task['keywords'][index])[:task['max_items']]
                 pending = []
                 for item in rows:
-                    ok, reason = assess(task['kind'], item.get('caption', ''))
+                    ok, reason = assess_item(task, item)
                     self.store.add_evidence(run['id'], run['platform'], item, 'checking' if ok else 'skipped', reason)
                     if ok and item.get('video_id'):
                         pending.append(item['video_id'])
@@ -134,13 +135,13 @@ class Engine:
                 return self.update(run, 'waiting', f'搜索读取{len(rows)}条，{len(pending)}条等待详情核验', now+300)
             vid = p['pending'].pop(0)
             item = browser.detail(vid)
-            ok, reason = detail_ready(task['kind'], item)
+            ok, reason = detail_ready(task['kind'], item, task.get('adult_target', 'inventory'))
             self.store.add_evidence(run['id'], run['platform'], item, 'eligible' if ok else 'skipped', reason)
             if not ok:
                 return self.update(run, 'waiting', '自动跳过：' + reason, now+300)
             text = None
             with self.store.connect() as db:
-                for candidate in task['templates']:
+                for candidate in candidates(task, item):
                     if not contact_reason(db, run['platform'], item, candidate, now):
                         text = candidate
                         break

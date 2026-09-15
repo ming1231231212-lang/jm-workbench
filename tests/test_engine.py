@@ -115,3 +115,46 @@ def test_crawler_risk_does_not_retry(status, data):
 
 def test_crawler_success_payload():
     assert response_risk(200, {'result': 1, 'data': []}) == ''
+
+
+def configure_generated_run(rig):
+    from jm_workbench.policies.comments import ADULT_CORE
+    rig.store.stop()
+    old=rig.store.objects('task')[0]
+    payload={k:v for k,v in old.items() if k not in ('id','version')}
+    task=rig.cfg.task(dict(payload,adult_target='merchant',comment_mode='core_variants',comment_core=ADULT_CORE),old['id'])
+    rig.run_id=rig.cfg.launch()['created'][0]
+    rig.item['caption']='本店成人用品正常营业'
+    return task
+
+
+def test_generated_merchant_comment_reaches_reservation_and_fake_send(rig):
+    from jm_workbench.policies.comments import candidates
+    task=configure_generated_run(rig)
+    rig.engine.tick()
+    advance(rig)
+    assert rig.fake.sends==1
+    attempt=rig.store.rows('SELECT * FROM attempts')[0]
+    assert attempt['content']==candidates(task,rig.item)[0]
+    assert attempt['state']=='sent'
+
+
+def test_generated_comment_does_not_reroll_to_avoid_contact_history(rig):
+    from jm_workbench.policies.comments import candidates
+    task=configure_generated_run(rig)
+    with rig.store.connect() as db:
+        db.execute('INSERT INTO history VALUES(?,?,?,?,?)',('ks','other-video','other-author',candidates(task,rig.item)[0],rig.clock.now-2000))
+    rig.engine.tick()
+    advance(rig)
+    assert rig.fake.sends==0
+    assert not rig.store.rows('SELECT * FROM attempts')
+
+
+def test_generated_comment_unknown_result_still_locks_platform(rig):
+    configure_generated_run(rig)
+    rig.fake.receipt={'uncertain':True,'reason':'模拟网络中断'}
+    rig.engine.tick()
+    advance(rig)
+    advance(rig,3600)
+    assert rig.fake.sends==1
+    assert rig.store.rows('SELECT * FROM risk')

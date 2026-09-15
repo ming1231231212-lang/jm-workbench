@@ -32,6 +32,9 @@ class TaskInput(Strict):
     comments_per_item: int = Field(default=10, ge=1, le=20)
     max_publish: int = Field(default=1, ge=1, le=5)
     templates: list[str] = Field(default_factory=list, max_length=10)
+    adult_target: Literal['inventory', 'merchant'] = 'inventory'
+    comment_mode: Literal['templates', 'core_variants'] = 'templates'
+    comment_core: str = Field(default='', max_length=80)
     start_hour: int = Field(default=20, ge=8, le=22)
     end_hour: int = Field(default=23, ge=9, le=23)
     enabled: bool = True
@@ -48,10 +51,16 @@ class TaskInput(Strict):
             if self.start_hour < 20:
                 raise ValueError('评论时段限定20:00至23:00，可进一步缩短')
             from ..policies.rules import validate_template
-            if not self.templates:
-                raise ValueError('请配置至少一条评论模板')
-            for text in self.templates:
-                validate_template(self.kind, text)
+            if self.comment_mode == 'core_variants':
+                if self.kind != 'adult_comments':
+                    raise ValueError('核心句变体当前仅用于成人用品收货业务')
+                from ..policies.comments import variants
+                variants(self.comment_core)
+            else:
+                if not self.templates:
+                    raise ValueError('请配置至少一条评论模板')
+                for text in self.templates:
+                    validate_template(self.kind, text)
         if any(not v.strip() or len(v) > 40 or re.search(r'[\r\n\x00,，]', v) for v in self.keywords):
             raise ValueError('每行一个关键词，长度1至40字，不含逗号')
         self.keywords = list(dict.fromkeys(v.strip() for v in self.keywords))
