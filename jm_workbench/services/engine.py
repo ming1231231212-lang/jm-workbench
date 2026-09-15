@@ -3,6 +3,7 @@ import threading
 import time
 from ..core.config import revision
 from ..core.db import dumps
+from ..core.instance import InstanceLock
 from ..adapters.crawler import Crawler
 from ..adapters.errors import Cancelled, LocalBrowserError, PlatformRisk
 from ..policies.rules import assess, detail_ready
@@ -18,8 +19,10 @@ class Engine:
         self.shutdown = threading.Event()
         self.step_lock = threading.Lock()
         self.thread = None
+        self.instance_lock = None
 
     def start(self):
+        self.instance_lock = InstanceLock(self.cfg.config.home/'worker.lock')
         recover(self.store)
         self.thread = threading.Thread(target=self.loop, name='jm-worker', daemon=True)
         self.thread.start()
@@ -28,6 +31,8 @@ class Engine:
         self.shutdown.set()
         if self.thread:
             self.thread.join(timeout=5)
+        if self.instance_lock and (not self.thread or not self.thread.is_alive()):
+            self.instance_lock.close()
 
     def loop(self):
         while not self.shutdown.is_set():

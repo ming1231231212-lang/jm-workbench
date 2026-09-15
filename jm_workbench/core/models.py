@@ -55,6 +55,8 @@ class TaskInput(Strict):
         if any(not v.strip() or len(v) > 40 or re.search(r'[\r\n\x00,，]', v) for v in self.keywords):
             raise ValueError('每行一个关键词，长度1至40字，不含逗号')
         self.keywords = list(dict.fromkeys(v.strip() for v in self.keywords))
+        if self.platform == 'ks' and any('.' in v for v in self.keywords):
+            raise ValueError('快手关键词不能包含英文句点，请使用自然语言关键词')
         return self
 
 

@@ -110,7 +110,7 @@ class Configuration:
                     raise ValueError('请先检查账号连接')
                 if task['kind'] != 'crawler' and not account.get('identity'):
                     raise ValueError('评论任务需要核验登录身份')
-                if task['kind'] == 'crawler' and not self.config.crawler_ready():
+                if task['kind'] == 'crawler' and (task['platform'] != 'ks' or task['collect_comments']) and not self.config.crawler_ready():
                     raise ValueError('请先配置MediaCrawler运行目录及Python路径')
                 endpoint(account['profile_dir'])
             except Exception as ex:

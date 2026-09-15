@@ -2,6 +2,7 @@
 import asyncio
 import importlib
 import json
+import os
 import sys
 import time
 from pathlib import Path
@@ -26,7 +27,7 @@ def response_risk(status, data):
         message = ' '.join(str(data.get(k, '')) for k in ('msg', 'message', 'error_msg', 'errors'))
         if any(w in message.lower() for w in ('captcha', 'verify', '频繁', '验证码', '验证失败', '访问受限', '封禁', '风控', '滑块', '账号异常')):
             return '平台要求验证或限制访问，任务已停止'
-        if data.get('result') in (400002, 400001) or data.get('code') in (-100, 300012, -102):
+        if data.get('result') in (2, 50, 400002, 400001) or data.get('code') in (-100, 300012, -102):
             return '平台返回访问限制状态，任务已停止'
     return ''
 
@@ -43,12 +44,26 @@ async def execute(p):
         SAVE_DATA_OPTION='jsonl', SAVE_DATA_PATH=p['output'], HEADLESS=False)
     for k, v in overrides.items():
         setattr(config, k, v)
+    # The local legacy fork auto-loads fix_cookies.json. This process must keep
+    # the selected browser's identity, so exclude that one optional input.
+    original_exists = os.path.exists
+    cookie_override = Path(p['root']) / 'fix_cookies.json'
+    def scoped_exists(path):
+        if isinstance(path, (str, bytes, os.PathLike)):
+            try:
+                if Path(path).resolve() == cookie_override.resolve():
+                    return False
+            except (TypeError, ValueError):
+                pass
+        return original_exists(path)
+    os.path.exists = scoped_exists
     import httpx
-    from playwright.async_api import BrowserContext
+    from playwright.async_api import BrowserContext, Page
     from tools.cdp_browser import CDPBrowserManager
     from tools.async_file_writer import AsyncFileWriter
     captured, contexts = [], []
     counts, last_request, request_count = {}, 0., 0
+    page_risk = []
     original_request = httpx.AsyncClient.request
     original_init = httpx.AsyncClient.__init__
 
@@ -60,6 +75,8 @@ async def execute(p):
 
     async def guarded_request(self, method, url, **kwargs):
         nonlocal last_request, request_count
+        if page_risk:
+            raise GuardStop(page_risk[0])
         request_count += 1
         if request_count > 40:
             raise LimitReached('已达到单批请求上限')
@@ -87,6 +104,12 @@ async def execute(p):
         if not self.browser.contexts:
             raise LoginRequired('账号浏览器没有可用窗口')
         self.browser_context = self.browser.contexts[0]
+        def watch(response):
+            if response.request.resource_type in ('document','xhr','fetch'):
+                reason = response_risk(response.status, {})
+                if reason:
+                    page_risk.append(reason)
+        self.browser_context.on('response', watch)
         contexts.append(self.browser_context)
         return self.browser_context
 
@@ -120,6 +143,9 @@ async def execute(p):
         if isinstance(value, type) and value.__module__ == login.__name__ and hasattr(value, 'begin'):
             value.begin = manual_login
     from main import CrawlerFactory
+    if p.get('probe'):
+        return {'state': 'completed', 'message': '依赖导入检查通过', 'items': [],
+                'platforms': list(CrawlerFactory.CRAWLERS), 'guarded': True}
     state, message = 'completed', '本批读取完成'
     try:
         crawler = CrawlerFactory.create_crawler(p['platform'])

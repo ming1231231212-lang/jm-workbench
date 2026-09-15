@@ -49,7 +49,7 @@ def create_app(home=None, worker=True, configuration=None):
                 return JSONResponse({'error': '请求来源无效，请刷新工作台后重试'}, status_code=403)
             if revision() != cfg.code_revision:
                 return JSONResponse({'error': '代码已更新，请重新启动工作台加载新版本'}, status_code=409)
-            if int(request.headers.get('content-length', '0')) > 32768:
+            if len(await request.body()) > 32768:
                 return JSONResponse({'error': '配置过大'}, status_code=413)
         response = await call_next(request)
         response.headers['X-Content-Type-Options'] = 'nosniff'
@@ -83,7 +83,7 @@ def create_app(home=None, worker=True, configuration=None):
                 'accounts': store.objects('account'), 'tasks': store.objects('task'), 'bindings': store.objects('binding'),
                 'runs': runs, 'risk': store.rows('SELECT * FROM risk'), 'counts': counts, 'attempt_counts': attempts,
                 'history_count': store.rows('SELECT COUNT(*) n FROM history')[0]['n'],
-                'platforms': [{'id': k, **v, 'crawler': config.crawler_ready(), 'verification': '待该平台登录实测'} for k, v in PLATFORMS.items()],
+                'platforms': [{'id': k, **v, 'crawler': k == 'ks' or config.crawler_ready(), 'verification': '待该平台登录实测'} for k, v in PLATFORMS.items()],
                 'settings': config.values, 'defaults': DEFAULTS,
                 'events': store.rows('SELECT * FROM events ORDER BY id DESC LIMIT 50')}
 

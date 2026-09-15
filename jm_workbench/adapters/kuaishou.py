@@ -103,7 +103,7 @@ class Browser:
 
     def search(self, keyword):
         if not keyword or len(keyword) > 40 or any(c in keyword for c in ".\r\n"):
-            raise Blocked("关键词不正确")
+            raise ValueError("关键词不正确")
         self.navigate("https://www.kuaishou.com/search/video?searchKey=" + quote(keyword))
         r = self.extract("search", keyword)
         return [{**row, "campaign": CAMPAIGN, "observed_at": time.time(), "detail_verified": False,
@@ -112,7 +112,7 @@ class Browser:
 
     def detail(self, vid):
         if not ID_RE.fullmatch(vid):
-            raise Blocked("视频 ID 不正确")
+            raise ValueError("视频 ID 不正确")
         self.navigate("https://www.kuaishou.com/short-video/" + vid)
         self.page.evaluate("() => document.querySelectorAll('video').forEach(v => v.pause())")
         r = self.extract("detail", vid)

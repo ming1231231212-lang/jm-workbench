@@ -7,6 +7,7 @@ from pathlib import Path
 from urllib.parse import urlparse
 from .chrome import endpoint
 from .errors import Cancelled, LocalBrowserError, PlatformRisk
+from .kuaishou import Browser
 
 
 def parameters(config, run, keyword):
@@ -24,6 +25,16 @@ class Crawler:
         self.config = config
 
     def run(self, run, keyword, cancelled=lambda: False):
+        task, account = run['snapshot']['task'], run['snapshot']['account']
+        if task['platform'] == 'ks' and not task['collect_comments']:
+            # Reuse the verified rendered search response without legacy API signatures.
+            with Browser(account) as browser:
+                who = browser.account()
+                if account.get('identity') and who['id'] != account['identity']:
+                    raise LocalBrowserError('浏览器身份与任务绑定不一致，已停止')
+                if cancelled():
+                    raise Cancelled('任务已停止')
+                return [dict(item, record_type='contents') for item in browser.search(keyword)[:task['max_items']]]
         params = parameters(self.config, run, keyword)
         work = Path(params['output'])
         path = work / 'parameters.json'
