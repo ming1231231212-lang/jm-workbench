@@ -67,17 +67,20 @@ def assess(kind, caption, adult_target='inventory'):
 def assess_item(task, item):
     if item.get('record_type') == 'comments' or item.get('comment_id'):
         return False, '采集到的评论不能作为视频评论目标'
+    if task['kind'] == 'adult_comments' and task.get('adult_target') == 'keyword':
+        from .relevance import keyword_relevance
+        return keyword_relevance(task, item)
     nickname = str(item.get('nickname') or item.get('author_name') or '')
     if task['kind'] == 'adult_comments' and re.search(r'新闻|频道|广播|热线|财经|杂谈|中安在线|荆楚网', nickname):
         return False, '媒体或行业账号，不能认定为经营者自己的视频'
     return assess(task['kind'], item.get('caption', ''), task.get('adult_target', 'inventory'))
 
 
-def detail_ready(kind, item, adult_target='inventory'):
+def detail_ready(kind, item, adult_target='inventory', keywords=None):
     if not ID_RE.fullmatch(str(item.get('video_id', ''))) or not ID_RE.fullmatch(str(item.get('author_id', ''))):
         return False, '目标视频或作者标识不完整'
     if item.get('detail_verified') is not True or item.get('source', {}).get('kind') != 'detail':
         return False, '缺少准确绑定的视频详情'
     if item.get('can_comment') is not True:
         return False, '视频没有明确开放评论'
-    return assess_item({'kind': kind, 'adult_target': adult_target}, item)
+    return assess_item({'kind': kind, 'adult_target': adult_target, 'keywords': keywords or []}, item)

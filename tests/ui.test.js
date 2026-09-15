@@ -127,7 +127,7 @@ test("comment editing separates scope, core and full templates with safe preview
     adult_comment_core: "店里如果有积压或停卖的货可以找我哦",
   });
   assert.ok(html.includes('name="adult_target"'));
-  assert.ok(html.includes('value="merchant" selected'));
+  assert.ok(html.includes('value="keyword" selected'));
   assert.ok(html.includes('value="core_variants" selected'));
   assert.ok(html.includes('name="comment_core"'));
   assert.ok(html.includes('data-action="preview-comment"'));

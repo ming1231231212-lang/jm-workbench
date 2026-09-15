@@ -58,6 +58,8 @@ def examples(task):
 def target_description(task):
     if task['kind'] == 'peiwang_comments':
         return '正文明确成年且本人正在找陪玩工作；排除未成年人和招聘方。'
+    if task.get('adult_target') == 'keyword':
+        return '标题/正文与本次搜索关键词主题及相关要素一致即可；无需店主身份或库存，可包含相关报道和讨论。当前未核验画面或口播。'
     if task.get('adult_target', 'inventory') == 'merchant':
         return '正文明确是自己经营的成人用品门店、厂家或仓库；无需提前说明库存。'
     return '正文明确成人用品、自家经营，并有库存、补货或清仓等货品线索。'

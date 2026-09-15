@@ -33,7 +33,7 @@ export function dataPage(
       '<a class="button" href="/api/export" download>↓ 导出全部记录（含分类）</a>',
     ) +
     `<div class="data-summary"><article><span>本批原始记录</span><b>${summary.records}<small>条</small></b></article><article><span>去重后内容</span><b>${summary.unique}<small>条</small></b></article><article><span>合并重复记录</span><b>${summary.duplicates}<small>条</small></b></article><article><span>正文初筛通过</span><b>${summary.content_matches}<small>条</small></b></article></div>
-    <div class="data-explanation">${summary.content_matches === 0 ? "这批内容尚无通过评论正文规则的目标。" : "正文初筛通过仍需执行时核验准确详情和账号。"}“门店 / 品牌线索”只表示值得进一步了解，不能证明对方有尾货。</div>
+    <div class="data-explanation">${summary.content_matches === 0 ? "这批内容尚无通过评论正文规则的目标。" : "正文初筛通过仍需执行时核验准确详情和账号。"}${(result.comment_templates || []).some(t => t.enabled && t.adult_target === "keyword") ? "当前按关键词文字内容匹配，相关报道与讨论也可通过；匹配不代表已确认货源。" : "“门店 / 品牌线索”只表示值得进一步了解，不能证明对方有尾货。"}</div>
     <details class="comment-templates" open><summary>满足条件后，会发哪些评论？</summary><div class="template-grid">${templates || '<p class="muted">尚未配置评论模板，请到任务配置中添加。</p>'}</div></details>
     <form id="data-filter" class="filter-bar data-filters"><select name="batch" aria-label="采集批次"><option value="latest" ${batch === "latest" ? "selected" : ""}>最新采集批次</option><option value="all" ${batch === "all" ? "selected" : ""}>全部批次（包含历史）</option>${(result.batches || []).map((b) => `<option value="${e(b.run_id)}" ${batch === b.run_id ? "selected" : ""}>${e(b.name)} · ${time(b.latest)} · ${b.records}条</option>`).join("")}</select><input name="q" value="${e(q)}" placeholder="搜索正文、作者或关键词" aria-label="搜索数据"><select name="decision" aria-label="筛选状态">${[
       ["", "全部执行状态"],

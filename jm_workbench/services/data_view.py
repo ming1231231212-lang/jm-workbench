@@ -93,7 +93,7 @@ def preview(store, row, tasks, now):
         for table in ('attempts', 'history'):
             if db.execute(f'SELECT 1 FROM {table} WHERE platform=? AND video_id=?', (row['platform'], row['video_id'])).fetchone():
                 return dict(base, status='contacted', label='已有接触记录', reason='此视频已尝试联系，系统不会再次发送')
-    ready = any(detail_ready(t['kind'], item, t.get('adult_target', 'inventory'))[0] for t in applicable)
+    ready = any(detail_ready(t['kind'], item, t.get('adult_target', 'inventory'), t['keywords'])[0] for t in applicable)
     if not ready or not 0 <= now - (item.get('observed_at') or 0) <= 120:
         return dict(base, status='needs_detail', label='待详情核验', reason='正文初筛通过；须重新读取准确视频详情，核验作者、评论权限和时效')
     if store.rows('SELECT 1 FROM risk WHERE platform=?', (row['platform'],)):

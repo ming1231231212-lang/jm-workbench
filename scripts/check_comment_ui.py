@@ -24,14 +24,14 @@ def main(profile, port):
             task = next(t for t in state['tasks'] if t['kind']=='adult_comments')
             page.locator(f'[data-action="edit-task"][data-id="{task["id"]}"]').click()
             form = page.locator('#task-form')
-            form.locator('[name=adult_target]').select_option('merchant')
+            form.locator('[name=adult_target]').select_option('keyword')
             form.locator('[name=comment_mode]').select_option('core_variants')
             form.locator('[name=comment_core]').fill(ADULT_CORE)
             assert not form.locator('[name=templates]').is_visible()
             checks.append('scope and core mode are editable; inactive templates are hidden')
             form.get_by_role('button',name='预览文案',exact=True).click()
             expect(form.locator('#comment-preview-result blockquote')).to_have_count(3)
-            assert '无需提前说明库存' in form.locator('#comment-preview-result').inner_text()
+            assert '无需店主身份或库存' in form.locator('#comment-preview-result').inner_text()
             current = page.evaluate("async()=>await(await fetch('/api/state')).json()")
             for key in ['tasks','runs','attempt_counts']:
                 assert state[key]==current[key]
@@ -47,7 +47,7 @@ def main(profile, port):
             expect(page.locator('#dialog')).not_to_be_visible()
             saved = page.evaluate("async()=>await(await fetch('/api/state')).json()")
             new = next(t for t in saved['tasks'] if t['id']==task['id'])
-            assert new['adult_target']=='merchant' and new['comment_mode']=='core_variants'
+            assert new['adult_target']=='keyword' and new['comment_mode']=='core_variants'
             assert new['comment_core']==ADULT_CORE
             for key in ['keywords','max_items','max_publish','start_hour','end_hour']:
                 assert new[key]==task[key]
@@ -56,7 +56,7 @@ def main(profile, port):
             checks.append('save changes only selected task and never starts execution')
             page.reload(wait_until='networkidle')
             page.locator(f'[data-action="edit-task"][data-id="{task["id"]}"]').click()
-            expect(form.locator('[name=adult_target]')).to_have_value('merchant')
+            expect(form.locator('[name=adult_target]')).to_have_value('keyword')
             expect(form.locator('[name=comment_mode]')).to_have_value('core_variants')
             expect(form.locator('[name=comment_core]')).to_have_value(ADULT_CORE)
             checks.append('saved scope and core survive reload')
@@ -73,7 +73,7 @@ def main(profile, port):
             page.goto(url+'/#data',wait_until='networkidle')
             card=page.locator('.template-card').filter(has_text=task['name'])
             expect(card).to_contain_text(ADULT_CORE)
-            expect(card).to_contain_text('无需提前说明库存')
+            expect(card).to_contain_text('无需店主身份或库存')
             expect(card.locator('blockquote')).to_have_count(3)
             checks.append('data page uses saved scope and core generated examples')
             page.goto(url+'/#tasks',wait_until='networkidle')

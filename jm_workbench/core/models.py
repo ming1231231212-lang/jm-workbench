@@ -32,7 +32,7 @@ class TaskInput(Strict):
     comments_per_item: int = Field(default=10, ge=1, le=20)
     max_publish: int = Field(default=1, ge=1, le=5)
     templates: list[str] = Field(default_factory=list, max_length=10)
-    adult_target: Literal['inventory', 'merchant'] = 'inventory'
+    adult_target: Literal['inventory', 'merchant', 'keyword'] = 'inventory'
     comment_mode: Literal['templates', 'core_variants'] = 'templates'
     comment_core: str = Field(default='', max_length=80)
     start_hour: int = Field(default=20, ge=8, le=22)

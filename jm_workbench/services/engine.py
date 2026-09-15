@@ -128,14 +128,20 @@ class Engine:
                 pending = []
                 for item in rows:
                     ok, reason = assess_item(task, item)
+                    if task.get('adult_target') == 'keyword' and (item.get('source') or {}).get('query') != task['keywords'][index]:
+                        ok, reason = False, '返回内容与本次搜索关键词不一致'
                     self.store.add_evidence(run['id'], run['platform'], item, 'checking' if ok else 'skipped', reason)
                     if ok and item.get('video_id'):
-                        pending.append(item['video_id'])
-                p.update(keyword_index=index+1, pending=list(dict.fromkeys(pending)), collected=p.get('collected', 0)+len(rows))
+                        if not any((v.get('video_id') if isinstance(v, dict) else v) == item['video_id'] for v in pending):
+                            pending.append({'video_id': item['video_id'], 'search_origin': {'kind': 'search', 'video_id': item['video_id'], 'query': item['source']['query']}} if task.get('adult_target') == 'keyword' else item['video_id'])
+                p.update(keyword_index=index+1, pending=pending, collected=p.get('collected', 0)+len(rows))
                 return self.update(run, 'waiting', f'搜索读取{len(rows)}条，{len(pending)}条等待详情核验', now+300)
-            vid = p['pending'].pop(0)
+            pending = p['pending'].pop(0)
+            vid = pending['video_id'] if isinstance(pending, dict) else pending
             item = browser.detail(vid)
-            ok, reason = detail_ready(task['kind'], item, task.get('adult_target', 'inventory'))
+            if isinstance(pending, dict):
+                item = dict(item, search_origin=pending['search_origin'])
+            ok, reason = detail_ready(task['kind'], item, task.get('adult_target', 'inventory'), task['keywords'])
             self.store.add_evidence(run['id'], run['platform'], item, 'eligible' if ok else 'skipped', reason)
             if not ok:
                 return self.update(run, 'waiting', '自动跳过：' + reason, now+300)

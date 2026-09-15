@@ -56,7 +56,7 @@ def contact_reason(db, platform, item, text, now):
 
 def reserve(store, run, item, text, now):
     task, account = run['snapshot']['task'], run['snapshot']['account']
-    ok, reason = detail_ready(task['kind'], item, task.get('adult_target', 'inventory'))
+    ok, reason = detail_ready(task['kind'], item, task.get('adult_target', 'inventory'), task['keywords'])
     if not ok:
         raise ValueError(reason)
     validate_template(task['kind'], text)

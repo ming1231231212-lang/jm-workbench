@@ -10,10 +10,11 @@ export function commentFields(s, t = {}) {
     "成人用品评论范围",
     "adult_target",
     [
+      ["keyword", "与搜索关键词内容一致即可"],
       ["merchant", "商家自己的经营视频（无需先说明库存）"],
       ["inventory", "需要库存、补货或清仓等线索"],
     ],
-    t.adult_target || (t.id ? "inventory" : "merchant"),
+    t.adult_target || (t.id ? "inventory" : "keyword"),
   )}${select(
     "文案方式",
     "comment_mode",

@@ -158,3 +158,45 @@ def test_generated_comment_unknown_result_still_locks_platform(rig):
     advance(rig,3600)
     assert rig.fake.sends==1
     assert rig.store.rows('SELECT * FROM risk')
+
+
+def configure_keyword_run(rig):
+    task=configure_generated_run(rig)
+    rig.store.stop()
+    payload={k:v for k,v in task.items() if k not in ('id','version')}
+    task=rig.cfg.task(dict(payload,adult_target='keyword',keywords=['成人用品店怎么样']),task['id'])
+    rig.run_id=rig.cfg.launch()['created'][0]
+    rig.item.update(caption='记者调查：成人用品店经营情况',nickname='城市新闻')
+    rig.fake.search=lambda self,keyword:[dict(rig.item,detail_verified=False,source={'kind':'search','query':keyword})]
+    return task
+
+
+def test_keyword_search_origin_survives_detail_and_reservation(rig):
+    task=configure_keyword_run(rig)
+    rig.engine.tick()
+    row=rig.store.rows('SELECT progress FROM runs WHERE id=?',(rig.run_id,))[0]
+    pending=json.loads(row['progress'])['pending'][0]
+    assert pending['search_origin']['query']==task['keywords'][0]
+    advance(rig)
+    assert rig.fake.sends==1
+    item=json.loads(rig.store.rows('SELECT evidence FROM attempts')[0]['evidence'])
+    assert item['search_origin']['video_id']==item['video_id']
+    assert item['search_origin']['query']==task['keywords'][0]
+
+
+def test_keyword_mode_rechecks_actual_detail_topic(rig):
+    configure_keyword_run(rig)
+    rig.engine.tick()
+    rig.item['caption']='今天女装店换新款'
+    advance(rig)
+    assert rig.fake.sends==0
+    assert not rig.store.rows('SELECT * FROM attempts')
+
+
+def test_keyword_mode_rejects_mislabeled_search_response(rig):
+    configure_keyword_run(rig)
+    rig.fake.search=lambda self,keyword:[dict(rig.item,source={'kind':'search','query':'另一个词'})]
+    rig.engine.tick()
+    advance(rig)
+    assert rig.fake.sends==0
+    assert rig.store.rows('SELECT decision FROM evidence')[0]['decision']=='skipped'

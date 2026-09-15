@@ -104,3 +104,15 @@ def test_preview_obeys_scope_and_generated_comment_for_exact_video(store):
     assert row['comment_preview']['templates']==candidates(task,row['data'])
     assert len(result['comment_templates'][0]['templates'])==3
     assert result['comment_templates'][0]['comment_core']==ADULT_CORE
+
+
+def test_keyword_preview_accepts_related_news_without_changing_classification(store):
+    task=next(t for t in store.objects('task') if t['kind']=='adult_comments')
+    store.put('task',dict(task,adult_target='keyword',keywords=['成人用品店']),task['id'])
+    add(store,'video12345','记者调查：成人用品店怎么经营','某新闻',source={'kind':'search','query':'成人用品店'})
+    row=data_view(store)['items'][0]
+    assert row['category']=='discussion'
+    assert row['comment_preview']['content_match']
+    assert row['comment_preview']['status']=='needs_detail'
+    assert row['comment_preview']['templates']
+    assert not store.rows('SELECT * FROM attempts')
