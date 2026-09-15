@@ -1,0 +1,20 @@
+.venv/
+var/
+outputs/
+.pytest_cache/
+__pycache__/
+*.py[cod]
+.coverage
+htmlcov/
+.env*
+!.env.example
+*.db
+*.sqlite*
+*.log
+*.zip
+node_modules/
+browser_profiles/
+User Data/
+connection.json
+config.local.json
+
