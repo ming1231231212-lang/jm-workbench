@@ -5,6 +5,8 @@ let state,
   dataPage = 1,
   q = "",
   decision = "",
+  dataBatch = "latest",
+  dataCategory = "",
   busy = false,
   toastTimer,
   loading = false;
@@ -56,9 +58,17 @@ async function render() {
     "v" + state.version + " · " + state.revision.slice(0, 8);
   if (page === "data") {
     const result = await request(
-      `/api/data?page=${dataPage}&q=${encodeURIComponent(q)}&decision=${encodeURIComponent(decision)}`,
+      `/api/data?page=${dataPage}&q=${encodeURIComponent(q)}&decision=${encodeURIComponent(decision)}&batch=${encodeURIComponent(dataBatch)}&category=${encodeURIComponent(dataCategory)}`,
     );
-    content.innerHTML = views.data(state, result, q, decision);
+    dataPage = result.page;
+    content.innerHTML = views.data(
+      state,
+      result,
+      q,
+      decision,
+      dataBatch,
+      dataCategory,
+    );
   } else if (page === "runs")
     content.innerHTML = views.runs(state, await request("/api/attempts"));
   else content.innerHTML = views[page](state);
@@ -97,6 +107,11 @@ async function action(name, id) {
     );
   if (name === "data-prev" || name === "data-next") {
     dataPage = Math.max(1, dataPage + (name === "data-prev" ? -1 : 1));
+    return render();
+  }
+  if (name === "filter-category") {
+    dataCategory = id || "";
+    dataPage = 1;
     return render();
   }
   if (name === "clear-risk")
@@ -195,6 +210,7 @@ document.addEventListener("submit", async (event) => {
   if (form.id === "data-filter") {
     q = form.elements.q.value;
     decision = form.elements.decision.value;
+    dataBatch = form.elements.batch.value;
     dataPage = 1;
     await render();
     return;

@@ -49,6 +49,8 @@ MediaCrawler是可配置外部依赖，不捆绑上游源码。每次爬虫任�
 
 ## 当前数据结构
 
+`services/data_view.py`提供只读业务解释视图，计算分类、批次、去重、关键词来源和条件式评论预览；不改写原始evidence，也不生成发送许可。前端实现位于`web/static/data-page.js`和`data-page.css`，与发送执行器分开维护。
+
 | 表 | 用途 |
 |---|---|
 | objects | 账号、任务、矩阵绑定、迁移标记，独立版本号 |

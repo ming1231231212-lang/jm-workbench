@@ -68,3 +68,51 @@ test("matrix disables incompatible platform bindings", () => {
   assert.ok(html.includes("平台不匹配"));
   assert.ok(!html.includes('data-binding="true"'));
 });
+
+test("data page explains grouping and configured comments without approval buttons", () => {
+  const html = views.data(s, {
+    items: [
+      {
+        id: 1,
+        platform: "ks",
+        category: "merchant",
+        category_label: "门店 / 品牌线索",
+        data: { nickname: "某店", caption: "<script>bad</script>" },
+        keywords: ["词一", "词二"],
+        occurrences: 2,
+        comment_preview: {
+          label: "不会评论",
+          reason: "缺少正文证据",
+          templates: [],
+        },
+      },
+    ],
+    total: 1,
+    page: 1,
+    summary: {
+      records: 2,
+      unique: 1,
+      duplicates: 1,
+      content_matches: 0,
+      categories: [{ id: "merchant", label: "门店 / 品牌线索", count: 1 }],
+    },
+    comment_templates: [
+      {
+        name: "当前任务",
+        kind: "adult_comments",
+        enabled: true,
+        start_hour: 20,
+        end_hour: 23,
+        templates: ["当前真实配置模板"],
+      },
+    ],
+    batches: [],
+  });
+  assert.ok(html.includes("当前真实配置模板"));
+  assert.ok(html.includes("不会评论"));
+  assert.ok(html.includes("2 次采集记录已合并"));
+  assert.ok(html.includes("词一、词二"));
+  assert.ok(html.includes('value="latest" selected'));
+  assert.ok(!html.includes("<script>"));
+  assert.ok(!html.includes('data-action="launch"'));
+});

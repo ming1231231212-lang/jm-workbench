@@ -94,7 +94,7 @@ def main():
         assert page.locator('details[open] pre').first.is_visible()
         result['checks'].append('search data and inspect evidence')
         with page.expect_download() as download:
-            page.get_by_role('link',name='↓ 导出CSV').click()
+            page.locator('a[href="/api/export"]').click()
         download.value.save_as(root/'outputs'/'ui-export.csv')
         result['checks'].append('CSV downloaded')
         page.locator('#nav a[href="#overview"]').click()

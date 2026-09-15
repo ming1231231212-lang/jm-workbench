@@ -10,6 +10,7 @@ import {
   button,
   names,
 } from "./ui.js";
+import { dataPage } from "./data-page.js";
 
 export const pages = [
   ["overview", "◫", "工作概览"],
@@ -169,39 +170,15 @@ export function runs(s, attempts = []) {
     `<div class="panel"><div class="panel-title"><h2>执行队列</h2><span>${rows.length} 项最近任务</span></div>${rows.length ? `<div class="table-wrap"><table><thead><tr><th>任务 / 账号</th><th>状态</th><th>当前进展</th><th>下一步时间</th><th></th></tr></thead><tbody>${rows.map((r) => `<tr><td><b>${e(r.snapshot.task.name)}</b><small>${e(r.snapshot.account.name)} · ${time(r.created)}</small></td><td>${badge(r.state)}</td><td class="wrap">${e(r.message || "等待执行")}<small>采集 ${r.progress.collected || 0} · 发布 ${r.progress.sent || 0}</small></td><td>${active(r) && r.due ? time(r.due) : "—"}</td><td>${active(r) ? button("停止", "stop-run", r.id, "quiet") : ""}</td></tr>`).join("")}</tbody></table></div>` : empty("还没有执行记录", "完成配置后点击“一键执行”。")}</div><div class="panel spaced"><div class="panel-title"><h2>评论发送记录</h2><span>有回执才记为平台已接收</span></div>${attempts.length ? `<div class="table-wrap"><table><thead><tr><th>视频 / 时间</th><th>状态</th><th>评论内容</th><th>回执</th></tr></thead><tbody>${attempts.map((a) => `<tr><td>${e(a.video_id)}<small>${time(a.created)}</small></td><td>${badge(a.state)}</td><td class="wrap">${e(a.content)}</td><td class="wrap">${e(a.receipt.reason || "")}<small>${e(a.receipt.comment_id || "无评论ID")}</small></td></tr>`).join("")}</tbody></table></div>` : empty("本工作台还没有新发送记录", `已载入 ${s.history_count} 条历史接触记录用于去重。`)}</div><div class="panel spaced"><div class="panel-title"><h2>操作日志</h2></div><div class="event-list">${s.events.map((a) => `<div><span class="event-dot ${a.level === "risk" ? "danger" : ""}"></span><p>${e(a.message)}<small>${time(a.created)}</small></p></div>`).join("") || '<p class="muted">暂无操作记录</p>'}</div></div>`
   );
 }
-export function data(s, result, q = "", decision = "") {
-  return (
-    heading(
-      "DATA",
-      "数据中心",
-      "查看采集内容及自动筛选依据，按关键词检索，导出后继续跟进。",
-      '<a class="button" href="/api/export" download>↓ 导出CSV</a>',
-    ) +
-    `<form id="data-filter" class="filter-bar"><input name="q" value="${e(q)}" placeholder="搜索正文、作者或关键词" aria-label="搜索数据"><select name="decision" aria-label="筛选状态">${[
-      ["", "全部状态"],
-      ["collected", "爬虫采集"],
-      ["checking", "待详情核验"],
-      ["eligible", "符合条件"],
-      ["skipped", "已跳过"],
-      ["legacy", "历史数据"],
-    ]
-      .map(
-        ([v, n]) =>
-          `<option value="${v}" ${v === decision ? "selected" : ""}>${n}</option>`,
-      )
-      .join(
-        "",
-      )}</select><button class="button primary">查询</button><span class="muted">共 ${result.total} 条</span></form><div class="panel">${
-      result.items.length
-        ? `<div class="data-list">${result.items
-            .map((r) => {
-              const d = r.data;
-              return `<article><div class="data-meta"><span>${platformName(s, r.platform)}</span>${badge(r.decision)}<time>${time(r.created)}</time></div><h3>${e(d.nickname || d.user_name || d.author_name || "作者信息未提供")}</h3><p>${e(d.caption || d.title || d.content || JSON.stringify(d).slice(0, 300))}</p><div class="data-reason"><span>判断依据</span>${e(r.reason)}</div><details><summary>查看完整采集字段</summary><pre>${e(JSON.stringify(d, null, 2))}</pre></details></article>`;
-            })
-            .join("")}</div>`
-        : empty("没有符合条件的数据", "调整筛选条件，或先执行一项采集任务。")
-    }</div><div class="pagination">${button("← 上一页", "data-prev", "", "quiet")}<span>第 ${result.page} / ${Math.max(1, Math.ceil(result.total / 30))} 页</span>${button("下一页 →", "data-next", "", "quiet")}</div>`
-  );
+export function data(
+  s,
+  result,
+  q = "",
+  decision = "",
+  batch = "latest",
+  category = "",
+) {
+  return dataPage(s, result, q, decision, batch, category);
 }
 export function settings(s) {
   return (
