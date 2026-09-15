@@ -22,7 +22,7 @@ export function dataPage(
   const templates = (result.comment_templates || [])
     .map(
       (t) =>
-        `<article class="template-card"><div><b>${e(t.name)}</b><span>${t.enabled ? "已启用" : "已停用"} · ${t.start_hour}:00–${t.end_hour}:00</span></div><p class="template-condition">${t.kind === "adult_comments" ? "用于正文明确成人品类、自有经营与货品线索的视频。" : "用于正文明确成年且本人正在找陪玩工作的视频。"}</p>${t.templates.map((text) => `<blockquote>${e(text)}</blockquote>`).join("")}<small>模板来自当前任务配置；满足筛选、账号、去重和时段条件后才会使用。</small></article>`,
+        `<article class="template-card"><div><b>${e(t.name)}</b><span>${t.enabled ? "已启用" : "已停用"} · ${t.start_hour}:00–${t.end_hour}:00</span></div><p class="template-condition">${e(t.target_description || (t.kind === "adult_comments" ? "用于正文明确成人品类、自有经营与货品线索的视频。" : "用于正文明确成年且本人正在找陪玩工作的视频。"))}</p>${t.comment_mode === "core_variants" ? `<p><b>评论核心：</b>${e(t.comment_core)}</p><small>以下为生成示例；每个视频会稳定选用一句。</small>` : ""}${t.templates.map((text) => `<blockquote>${e(text)}</blockquote>`).join("")}<small>文案来自当前任务配置；满足筛选、账号、去重和时段条件后才会使用。</small></article>`,
     )
     .join("");
   return (

@@ -27,6 +27,8 @@ def task(**changes):
     ('我想开成人用品店，准备招人', False),
     ('本店成人用品无货，已经全部卖完了', False),
     ('本店鞋服正常营业，了解成人用品行业', False),
+    ('本店成人用品被盗，盗窃经过曝光', False),
+    ('本店成人用品加盟纠纷投诉', False),
 ])
 def test_merchant_scope_checks_business_and_ownership(caption, ok):
     assert assess('adult_comments', caption, 'merchant')[0] is ok
@@ -58,6 +60,16 @@ def test_core_variants_preserve_conditional_meaning_and_are_stable():
     assert candidates(task(), item) == candidates(task(), dict(item, observed_at=99999999))
     assert len(candidates(task(), item)) == 1
     assert all(text in pool for text in examples(task()))
+
+
+def test_user_core_edits_are_preserved_and_single_line():
+    core='店内如果有积压库存，可以和我说一下品类。'
+    pool=variants(core)
+    assert all('说一下品类' in text for text in pool)
+    assert all('停卖' not in text for text in pool)
+    assert all('您您' not in text for text in variants('您店里如果有积压或停卖的货可以找我哦'))
+    with pytest.raises(ValueError, match='一行'):
+        variants(ADULT_CORE+'\n再来一条')
 
 
 @pytest.mark.parametrize('core', [

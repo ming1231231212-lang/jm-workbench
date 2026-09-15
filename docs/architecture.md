@@ -64,6 +64,12 @@ MediaCrawler是可配置外部依赖，不捆绑上游源码。每次爬虫任�
 
 ## 评论执行顺序
 
+成人业务的任务字段：`adult_target=inventory`要求货品线索，`merchant`允许正文确认的自家成人用品经营视频。两种范围都不接受单凭搜索词、昵称或纯标签的判断；采集到的用户评论也不能充当视频正文。搜索、详情、事务占位、只读预览均读取任务自己的范围。旧配置没有该字段时沿用inventory。
+
+`comment_mode=templates`使用完整文案；`core_variants`由`policies/comments.py`围绕`comment_core`进行本机有限同义改写，不调用外部模型，不编造对方库存、经营状态或合作经历。每个准确视频ID稳定对应一条表达。去重拦截后不会另换一句重试。实际发送文本保存在attempts中，预览调用相同生成器。旧配置沿用templates；切换模式不会影响另一业务。
+
+`POST /api/comment-preview`校验未保存的任务配置并返回示例，不写数据库、不创建任务或发送尝试。配置界面位于`web/static/comment-fields.js`；数据页显示保存后的范围、核心和示例。原历史判断保留，当前预览按新配置重新计算。
+
 ```mermaid
 sequenceDiagram
  participant UI as 工作台

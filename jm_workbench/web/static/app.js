@@ -1,5 +1,10 @@
 import * as views from "./views.js";
 import { escape as e } from "./ui.js";
+import {
+  syncCommentFields,
+  taskPayload,
+  previewMarkup,
+} from "./comment-fields.js";
 let state,
   page = "",
   dataPage = 1,
@@ -86,11 +91,23 @@ async function refresh(show = false) {
 }
 function showForm(html) {
   document.querySelector("#dialog-content").innerHTML = html;
+  syncCommentFields(document.querySelector("#task-form"));
   dialog.showModal();
 }
 async function action(name, id) {
   if (name === "close-dialog") return dialog.close();
   if (name === "refresh") return refresh(true);
+  if (name === "preview-comment") {
+    const form = document.querySelector("#task-form");
+    if (!form.reportValidity()) return;
+    const result = await request(
+      "/api/comment-preview",
+      taskPayload(Object.fromEntries(new FormData(form))),
+    );
+    form.querySelector("#comment-preview-result").innerHTML =
+      previewMarkup(result);
+    return;
+  }
   if (name === "new-task" || name === "edit-task")
     return showForm(
       views.taskForm(
@@ -201,7 +218,21 @@ document.addEventListener("change", async (event) => {
           ? defaults[key].join("\n")
           : defaults[key];
     if (el.value === "crawler") el.form.elements.templates.value = "";
+    if (!el.form.dataset.id)
+      el.form.elements.comment_mode.value =
+        el.value === "adult_comments" ? "core_variants" : "templates";
   }
+  if (
+    el.form?.id === "task-form" &&
+    ["kind", "comment_mode", "adult_target"].includes(el.name)
+  )
+    syncCommentFields(el.form);
+});
+document.addEventListener("input", (event) => {
+  if (event.target.form?.id === "task-form")
+    event.target.form
+      .querySelector("#comment-preview-result")
+      .replaceChildren();
 });
 document.addEventListener("submit", async (event) => {
   const form = event.target;
@@ -222,24 +253,9 @@ document.addEventListener("submit", async (event) => {
     id = form.dataset.id;
   try {
     if (form.id === "task-form") {
-      for (const k of [
-        "max_items",
-        "comments_per_item",
-        "max_publish",
-        "start_hour",
-        "end_hour",
-      ])
-        data[k] = Number(data[k]);
-      for (const k of ["keywords", "templates"])
-        data[k] = data[k]
-          .split("\n")
-          .map((s) => s.trim())
-          .filter(Boolean);
-      data.enabled = data.enabled === "true";
-      data.collect_comments = data.collect_comments === "true";
       await request(
         "/api/tasks" + (id ? "/" + id : ""),
-        data,
+        taskPayload(data),
         id ? "PUT" : "POST",
       );
     } else if (form.id === "account-form") {

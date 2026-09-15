@@ -11,6 +11,7 @@ import {
   names,
 } from "./ui.js";
 import { dataPage } from "./data-page.js";
+import { commentFields } from "./comment-fields.js";
 
 export const pages = [
   ["overview", "◫", "工作概览"],
@@ -216,7 +217,7 @@ export function taskForm(s, t = {}) {
       ["true", "同时采集评论"],
     ],
     String(t.collect_comments ?? false),
-  )}${field("每条内容最多采集评论数", "comments_per_item", t.comments_per_item || 10, "number", 'min="1" max="20" required')}${field("评论开始时间（小时）", "start_hour", t.start_hour || 20, "number", 'min="20" max="22" required')}${field("评论结束时间（小时）", "end_hour", t.end_hour || 23, "number", 'min="21" max="23" required')}</div><label class="field"><span>评论模板 · 每行一条，爬虫任务可留空</span><textarea name="templates" rows="3">${e((t.templates || d.templates || []).join("\n"))}</textarea><small>使用与业务一致的条件式询问或18+招募文案。系统会校验模板。</small></label><div class="dialog-footer">${button("取消", "close-dialog")}<button class="button primary">保存任务</button></div></form>`;
+  )}${field("每条内容最多采集评论数", "comments_per_item", t.comments_per_item || 10, "number", 'min="1" max="20" required')}${field("评论开始时间（小时）", "start_hour", t.start_hour || 20, "number", 'min="20" max="22" required')}${field("评论结束时间（小时）", "end_hour", t.end_hour || 23, "number", 'min="21" max="23" required')}</div>${commentFields(s, t)}<div class="dialog-footer">${button("取消", "close-dialog")}<button class="button primary">保存任务</button></div></form>`;
 }
 export function accountForm(s, a = {}) {
   return `<form id="account-form" data-id="${a.id || ""}"><div class="dialog-header"><h2 id="dialog-title">${a.id ? "编辑账号" : "添加账号"}</h2>${button("×", "close-dialog", "", "icon-button")}</div>${field("账号备注名称", "name", a.name || "", "text", 'required maxlength="40"')}${select(

@@ -44,7 +44,7 @@ def assess(kind, caption, adult_target='inventory'):
         conflicts = ('晒猫', '猫咪', '旅游', '风景', '女装', '鞋服', '搞笑', '测评', '体验', '买家', '招商', '加盟', '代运营', '代理', '设备销售', '售货机出售', '朋友的店', '别人家', '探店', '路过', '怎么开', '如何开', '想开', '打算开', '收尾货', '收购', '回收', '不清仓', '不清货', '没有库存', '暂无', '无库存', '已售罄', '卖完了', '已清完', '不是本店', '不卖', '不做', '不再经营', '没有成人', '无货', '没货', '没开', '计划', '已处理完')
         if any(w in text for w in conflicts) or re.search(r'(我|我们|长期|大量|专业)收.{0,12}(尾货|库存|成人用品|情趣用品)', text):
             return False, '消费、同行收货、招商或否定内容，自动跳过'
-        if any(w in text for w in ('培训', '课程', '行业分析', '创业建议', '创业项目', '商业思维', '分享经验', '服装', '不是我的店', '不是我们店', '不是我店')):
+        if any(w in text for w in ('培训', '课程', '行业分析', '创业建议', '创业项目', '商业思维', '分享经验', '服装', '不是我的店', '不是我们店', '不是我店', '被偷', '盗窃', '夜闯', '被盗', '曝光', '投诉', '刑事辩护')):
             return False, '行业教学、其他品类或经营身份冲突，自动跳过'
         own = re.search(r'本店|我店|我们店|我的店|自家店|我们厂|本厂|自家工厂|本仓|我们仓库|自家仓库', text)
         opened = adult_target == 'merchant' and re.search(r'(?:我|我们)(?:开了|经营着|经营|开的)(?:一家|这家)?(?:成人用品|情趣用品|夫妻用品|计生用品)店', text)
@@ -68,7 +68,7 @@ def assess_item(task, item):
     if item.get('record_type') == 'comments' or item.get('comment_id'):
         return False, '采集到的评论不能作为视频评论目标'
     nickname = str(item.get('nickname') or item.get('author_name') or '')
-    if re.search(r'新闻|频道|广播|热线|财经|杂谈|中安在线|荆楚网', nickname):
+    if task['kind'] == 'adult_comments' and re.search(r'新闻|频道|广播|热线|财经|杂谈|中安在线|荆楚网', nickname):
         return False, '媒体或行业账号，不能认定为经营者自己的视频'
     return assess(task['kind'], item.get('caption', ''), task.get('adult_target', 'inventory'))
 

@@ -16,7 +16,7 @@ def test_brand_and_assets(api):
     assert client.get('/api/health').json()['app_id'] == 'jm-workbench'
     assert 'charset=utf-8' in client.get('/api/health').headers['Content-Type']
     assert '<title>JM工作台</title>' in client.get('/').text
-    for asset in ('app.js', 'views.js', 'ui.js', 'style.css', 'data-page.js', 'data-page.css'):
+    for asset in ('app.js', 'views.js', 'ui.js', 'style.css', 'data-page.js', 'data-page.css', 'comment-fields.js'):
         assert client.get('/static/'+asset).status_code == 200
 
 def test_cross_origin_and_missing_token_rejected(api):

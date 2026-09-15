@@ -931,6 +931,19 @@ footer {
   font-size: 10px;
   color: #b1bca5;
 }
+[hidden] {
+  display: none !important;
+}
+.comment-config {
+  margin-top: 20px;
+}
+#comment-preview-result blockquote {
+  margin: 12px 0;
+  padding: 12px;
+  background: #f5f7fb;
+  border-left: 3px solid #778be0;
+  overflow-wrap: anywhere;
+}
 dialog {
   border: 1px solid #e0e7d9;
   border-radius: 15px;

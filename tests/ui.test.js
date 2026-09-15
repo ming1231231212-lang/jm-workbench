@@ -2,6 +2,10 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import { escape, button } from "../jm_workbench/web/static/ui.js";
 import * as views from "../jm_workbench/web/static/views.js";
+import {
+  taskPayload,
+  previewMarkup,
+} from "../jm_workbench/web/static/comment-fields.js";
 const s = {
   accounts: [],
   tasks: [],
@@ -115,4 +119,61 @@ test("data page explains grouping and configured comments without approval butto
   assert.ok(html.includes('value="latest" selected'));
   assert.ok(!html.includes("<script>"));
   assert.ok(!html.includes('data-action="launch"'));
+});
+
+test("comment editing separates scope, core and full templates with safe previews", () => {
+  const html = views.taskForm({
+    ...s,
+    adult_comment_core: "店里如果有积压或停卖的货可以找我哦",
+  });
+  assert.ok(html.includes('name="adult_target"'));
+  assert.ok(html.includes('value="merchant" selected'));
+  assert.ok(html.includes('value="core_variants" selected'));
+  assert.ok(html.includes('name="comment_core"'));
+  assert.ok(html.includes('data-action="preview-comment"'));
+  const legacy = views.taskForm(s, {
+    id: "old",
+    kind: "adult_comments",
+    templates: ["旧文案"],
+  });
+  assert.ok(legacy.includes('value="inventory" selected'));
+  assert.ok(legacy.includes('value="templates" selected'));
+  const preview = previewMarkup({
+    target_description: "商家自己的经营视频",
+    examples: ["<script>unsafe</script>"],
+  });
+  assert.ok(!preview.includes("<script>"));
+  assert.ok(preview.includes("不加入发送队列"));
+});
+
+test("task form serializes comment fields without carrying adult mode into other business", () => {
+  const values = {
+    kind: "adult_comments",
+    adult_target: "merchant",
+    comment_mode: "core_variants",
+    comment_core: "核心句",
+    keywords: "词一\n词二",
+    enabled: "true",
+    collect_comments: "false",
+    max_items: "10",
+    max_publish: "1",
+    start_hour: "20",
+    end_hour: "23",
+    comments_per_item: "10",
+  };
+  const payload = taskPayload(values);
+  assert.equal(payload.comment_core, "核心句");
+  assert.equal(payload.adult_target, "merchant");
+  assert.deepEqual(payload.templates, []);
+  assert.deepEqual(payload.keywords, ["词一", "词二"]);
+  assert.equal(payload.max_publish, 1);
+  const other = taskPayload({
+    ...values,
+    kind: "peiwang_comments",
+    templates: "陪玩原文案",
+  });
+  assert.equal(other.comment_mode, "templates");
+  assert.equal(other.comment_core, "");
+  assert.equal(other.adult_target, "inventory");
+  assert.deepEqual(other.templates, ["陪玩原文案"]);
 });
