@@ -177,3 +177,31 @@ test("task form serializes comment fields without carrying adult mode into other
   assert.equal(other.adult_target, "inventory");
   assert.deepEqual(other.templates, ["陪玩原文案"]);
 });
+
+
+test("per video quantity is distinct from optional total limit", () => {
+  const html = views.taskForm(s);
+  assert.ok(html.includes('name="comments_per_video"'));
+  assert.ok(html.includes('value="all_matches" selected'));
+  assert.ok(html.includes('本任务最多评论几个视频'));
+  assert.ok(!html.includes('单次任务最多发布条数'));
+  const legacy = views.taskForm(s, {id:"old",kind:"adult_comments"});
+  assert.ok(legacy.includes('value="limited" selected'));
+  const payload=taskPayload({kind:"crawler",publish_scope:"all_matches"});
+  assert.equal(payload.comments_per_video,1);
+  assert.equal(payload.max_publish,1);
+});
+
+test("run view separates sent, pending and skipped; only offers one continuation", () => {
+  const run={id:"r",snapshot:{task:{name:"测试",kind:"adult_comments"},account:{name:"a"}},state:"completed",progress:{sent:1,pending:[{video_id:"v"}]}};
+  let html=views.runs({...s,runs:[run]});
+  assert.ok(html.includes('发布 1 · 待处理 1 · 跳过 0'));
+  assert.ok(html.includes('data-action="continue-run"'));
+  html=views.runs({...s,runs:[{...run,continuation_id:"child"}]});
+  assert.ok(!html.includes('data-action="continue-run"'));
+  assert.ok(html.includes('已接入补发'));
+  html=views.runs({...s,runs:[{...run,state:"waiting",progress:{source_run_id:"parent",selected_count:5,imported_count:4,pending:[{video_id:"v",wait_reason:"<script>"}],skipped_targets:[{video_id:"old",reason:"已有记录"}]}}]});
+  assert.ok(!html.includes('<script>'));
+  assert.ok(html.includes('原队列 5 个 · 接入 4 个 · 每个视频1条'));
+  assert.ok(html.includes('data-action="stop-run"'));
+});

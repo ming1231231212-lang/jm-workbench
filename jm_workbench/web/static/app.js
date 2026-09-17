@@ -149,6 +149,8 @@ async function action(name, id) {
   } else if (name === "stop") result = await request("/api/stop", {});
   else if (name === "stop-run")
     result = await request(`/api/runs/${id}/stop`, {});
+  else if (name === "continue-run")
+    result = await request(`/api/runs/${id}/continue`, {});
   else if (name === "open-account" || name === "check-account") {
     toast(
       name === "open-account"
@@ -224,7 +226,7 @@ document.addEventListener("change", async (event) => {
   }
   if (
     el.form?.id === "task-form" &&
-    ["kind", "comment_mode", "adult_target"].includes(el.name)
+    ["kind", "comment_mode", "adult_target", "publish_scope"].includes(el.name)
   )
     syncCommentFields(el.form);
 });

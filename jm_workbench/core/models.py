@@ -31,6 +31,8 @@ class TaskInput(Strict):
     collect_comments: bool = False
     comments_per_item: int = Field(default=10, ge=1, le=20)
     max_publish: int = Field(default=1, ge=1, le=5)
+    comments_per_video: Literal[1] = 1
+    publish_scope: Literal['all_matches', 'limited'] = 'all_matches'
     templates: list[str] = Field(default_factory=list, max_length=10)
     adult_target: Literal['inventory', 'merchant', 'keyword'] = 'inventory'
     comment_mode: Literal['templates', 'core_variants'] = 'templates'

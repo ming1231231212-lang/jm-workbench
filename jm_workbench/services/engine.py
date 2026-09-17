@@ -8,7 +8,15 @@ from ..adapters.crawler import Crawler
 from ..adapters.errors import Cancelled, LocalBrowserError, PlatformRisk
 from ..policies.rules import assess_item, detail_ready
 from ..policies.comments import candidates
-from .guard import read_slot, comment_due, reserve, finish, contact_reason, recover
+from .guard import read_slot, comment_due, reserve, finish, contact_status, recover, next_window
+
+
+def publish_limit_reached(task, progress):
+    return task.get('publish_scope', 'limited') == 'limited' and progress.get('sent', 0) >= task['max_publish']
+
+
+def candidate_due(candidate):
+    return candidate.get('not_before', 0) if isinstance(candidate, dict) else 0
 
 
 class Engine:
@@ -102,12 +110,13 @@ class Engine:
         index = p.get('keyword_index', 0)
         if index >= len(task['keywords']) and not p.get('pending'):
             return self.update(run, 'completed', '任务完成，可在数据中心查看结果')
-        if task['kind'] != 'crawler' and p.get('sent', 0) >= task['max_publish']:
+        if task['kind'] != 'crawler' and publish_limit_reached(task, p):
             return self.update(run, 'completed', '已达到本任务发布上限')
         if task['kind'] != 'crawler' and p.get('pending'):
             due = comment_due(self.store, run['platform'], task, now)
+            due = next_window(max(due, min(candidate_due(c) for c in p['pending'])), task['start_hour'], task['end_hour'])
             if due > now:
-                return self.update(run, 'waiting', '等待评论时段或共享发送间隔', due)
+                return self.update(run, 'waiting', f'剩余{len(p["pending"])}个视频；等待评论时段、共享限额或接触间隔', due)
         due = read_slot(self.store, run['platform'], now)
         if due > now:
             return self.update(run, 'waiting', '等待平台共享读取间隔或时段', due)
@@ -136,26 +145,42 @@ class Engine:
                             pending.append({'video_id': item['video_id'], 'search_origin': {'kind': 'search', 'video_id': item['video_id'], 'query': item['source']['query']}} if task.get('adult_target') == 'keyword' else item['video_id'])
                 p.update(keyword_index=index+1, pending=pending, collected=p.get('collected', 0)+len(rows))
                 return self.update(run, 'waiting', f'搜索读取{len(rows)}条，{len(pending)}条等待详情核验', now+300)
-            pending = p['pending'].pop(0)
+            pending_index = next(i for i,c in enumerate(p['pending']) if candidate_due(c) <= now)
+            pending = p['pending'][pending_index]
             vid = pending['video_id'] if isinstance(pending, dict) else pending
             item = browser.detail(vid)
-            if isinstance(pending, dict):
+            if isinstance(pending, dict) and pending.get('search_origin'):
                 item = dict(item, search_origin=pending['search_origin'])
             ok, reason = detail_ready(task['kind'], item, task.get('adult_target', 'inventory'), task['keywords'])
             self.store.add_evidence(run['id'], run['platform'], item, 'eligible' if ok else 'skipped', reason)
             if not ok:
+                p['pending'].pop(pending_index)
+                p['skipped'] = p.get('skipped', 0)+1
                 return self.update(run, 'waiting', '自动跳过：' + reason, now+300)
-            text = None
+            text, cooldown = None, None
+            contact_message = '无可用文案'
             with self.store.connect() as db:
                 for candidate in candidates(task, item):
-                    if not contact_reason(db, run['platform'], item, candidate, now):
+                    contact_message, due = contact_status(db, run['platform'], item, candidate, now)
+                    if not contact_message:
                         text = candidate
                         break
+                    if due is not None:
+                        cooldown = min(cooldown, due) if cooldown is not None else due
             if not text:
-                return self.update(run, 'waiting', '已跳过：视频、作者或评论文本近期有接触记录', now+300)
+                if cooldown is not None:
+                    deferred = dict(pending) if isinstance(pending, dict) else {'video_id': vid}
+                    deferred.update(not_before=cooldown, wait_reason=contact_message)
+                    p['pending'][pending_index] = deferred
+                    due = max(comment_due(self.store, run['platform'], task, now), min(candidate_due(c) for c in p['pending']))
+                    return self.update(run, 'waiting', '视频保留待补发：'+contact_message, next_window(due,task['start_hour'],task['end_hour']))
+                p['pending'].pop(pending_index)
+                p['skipped'] = p.get('skipped', 0)+1
+                return self.update(run, 'waiting', '已跳过：'+contact_message, now+300)
             if self.cancelled(run['id']):
                 raise Cancelled()
             ident = reserve(self.store, run, item, text, self.clock())
+            p['pending'].pop(pending_index)
             try:
                 if self.cancelled(run['id']):
                     receipt = {'not_sent': True, 'reason': '发送前用户停止'}
@@ -168,5 +193,10 @@ class Engine:
             status = finish(self.store, ident, receipt)
             if status == 'sent':
                 p['sent'] = p.get('sent', 0) + 1
-            self.update(run, 'completed' if p.get('sent', 0) >= task['max_publish'] else 'waiting',
-                        receipt.get('reason', '发送步骤结束'), self.clock()+1800)
+            complete = publish_limit_reached(task, p) or (index >= len(task['keywords']) and not p['pending'])
+            message = receipt.get('reason', '发送步骤结束')
+            if complete and p['pending']:
+                message += f'；达到任务总量限制，剩余{len(p["pending"])}个视频可继续补发'
+            elif p['pending']:
+                message += f'；剩余{len(p["pending"])}个视频继续排队'
+            self.update(run, 'completed' if complete else 'waiting', message, 0 if complete else self.clock()+1800)

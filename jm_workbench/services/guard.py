@@ -43,19 +43,31 @@ def comment_due(store, platform, task, now):
 
 
 def contact_reason(db, platform, item, text, now):
+    return contact_status(db, platform, item, text, now)[0]
+
+
+def contact_status(db, platform, item, text, now):
+    """None due means already attempted video; a future due means temporary cooldown."""
     vid, author = item['video_id'], item['author_id']
     for table in ('attempts', 'history'):
         if db.execute(f'SELECT 1 FROM {table} WHERE platform=? AND video_id=?', (platform, vid)).fetchone():
-            return '该视频已有接触记录'
-        if db.execute(f'SELECT 1 FROM {table} WHERE platform=? AND author_id=? AND created>?', (platform, author, now - 7 * 86400)).fetchone():
-            return '近7天已联系该作者'
-        if db.execute(f'SELECT 1 FROM {table} WHERE platform=? AND content=? AND created>?', (platform, text, now - 7 * 86400)).fetchone():
-            return '近7天已使用同一评论文本'
-    return ''
+            return '该视频已有接触记录', None
+    due, reasons = now, []
+    for table in ('attempts', 'history'):
+        for column, value, reason in (('author_id', author, '近7天已联系该作者'), ('content', text, '近7天已使用同一评论文本')):
+            row = db.execute(f'SELECT MAX(created) latest FROM {table} WHERE platform=? AND {column}=? AND created>?',
+                             (platform, value, now-7*86400)).fetchone()
+            if row['latest'] is not None:
+                due = max(due, row['latest']+7*86400+1)
+                if reason not in reasons:
+                    reasons.append(reason)
+    return '；'.join(reasons), due
 
 
 def reserve(store, run, item, text, now):
     task, account = run['snapshot']['task'], run['snapshot']['account']
+    if task.get('comments_per_video', 1) != 1:
+        raise ValueError('每个视频只能发送一条评论')
     ok, reason = detail_ready(task['kind'], item, task.get('adult_target', 'inventory'), task['keywords'])
     if not ok:
         raise ValueError(reason)

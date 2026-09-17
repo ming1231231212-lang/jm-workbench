@@ -33,6 +33,7 @@ class Store:
               state TEXT, receipt TEXT DEFAULT '{}', created REAL, UNIQUE(platform,video_id));
             CREATE TABLE IF NOT EXISTS events(id INTEGER PRIMARY KEY, run_id TEXT, level TEXT,
               message TEXT, created REAL);
+            CREATE TABLE IF NOT EXISTS continuations(source_run_id TEXT PRIMARY KEY, run_id TEXT NOT NULL);
             CREATE TABLE IF NOT EXISTS risk(platform TEXT PRIMARY KEY, reason TEXT, created REAL);
             CREATE TABLE IF NOT EXISTS reads(platform TEXT, created REAL);
             CREATE TABLE IF NOT EXISTS history(platform TEXT, video_id TEXT, author_id TEXT,

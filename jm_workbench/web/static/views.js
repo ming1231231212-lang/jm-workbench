@@ -154,6 +154,17 @@ export function platforms(s) {
     `<div class="panel"><div class="table-wrap"><table><thead><tr><th>平台</th><th>爬虫</th><th>评论发布</th><th>使用前检查</th></tr></thead><tbody>${s.platforms.map((p) => `<tr><td><b>${p.name}</b><small>${p.id}</small></td><td>${badge(p.crawler ? "适配器已连接" : "待配置运行依赖")}</td><td>${badge(p.comment ? "已接入" : "预留扩展")}</td><td class="muted">${p.id === "ks" ? "核验当前登录身份与视频详情" : "登录该平台后执行采集验证"}</td></tr>`).join("")}</tbody></table></div></div><div class="note">运行依赖已连接表示代码入口可用；不同平台的登录及接口状态，以各自任务的实际运行记录为准。</div><a class="button" href="#settings">配置爬虫运行路径 →</a>`
   );
 }
+function runActions(r) {
+  if (active(r)) return button("停止", "stop-run", r.id, "quiet");
+  if (r.continuation_id) return '<span class="muted">已接入补发</span>';
+  if (r.snapshot.task.kind !== "crawler" && r.progress.pending?.length)
+    return button("继续剩余视频", "continue-run", r.id, "quiet");
+  return "";
+}
+function pendingSummary(r) {
+  if (!r.progress.source_run_id) return "";
+  return `<small>原队列 ${r.progress.selected_count} 个 · 接入 ${r.progress.imported_count} 个 · 每个视频1条</small><details><summary>查看剩余与跳过原因</summary>${(r.progress.pending || []).map(p => `<small>${e(p.video_id)} · ${e(p.wait_reason || "待详情核验")} · 最早 ${time(Math.max(p.not_before || 0, r.due || 0))}</small>`).join("")}${(r.progress.skipped_targets || []).map(p => `<small>${e(p.video_id)} · 已跳过：${e(p.reason)}</small>`).join("")}</details>`;
+}
 export function runs(s, attempts = []) {
   const rows = s.runs;
   return (
@@ -168,7 +179,7 @@ export function runs(s, attempts = []) {
           `<div class="alert red"><strong>${platformName(s, r.platform)}已暂停</strong><span>${e(r.reason)}</span>${button("处理后解除", "clear-risk", r.platform)}</div>`,
       )
       .join("") +
-    `<div class="panel"><div class="panel-title"><h2>执行队列</h2><span>${rows.length} 项最近任务</span></div>${rows.length ? `<div class="table-wrap"><table><thead><tr><th>任务 / 账号</th><th>状态</th><th>当前进展</th><th>下一步时间</th><th></th></tr></thead><tbody>${rows.map((r) => `<tr><td><b>${e(r.snapshot.task.name)}</b><small>${e(r.snapshot.account.name)} · ${time(r.created)}</small></td><td>${badge(r.state)}</td><td class="wrap">${e(r.message || "等待执行")}<small>采集 ${r.progress.collected || 0} · 发布 ${r.progress.sent || 0}</small></td><td>${active(r) && r.due ? time(r.due) : "—"}</td><td>${active(r) ? button("停止", "stop-run", r.id, "quiet") : ""}</td></tr>`).join("")}</tbody></table></div>` : empty("还没有执行记录", "完成配置后点击“一键执行”。")}</div><div class="panel spaced"><div class="panel-title"><h2>评论发送记录</h2><span>有回执才记为平台已接收</span></div>${attempts.length ? `<div class="table-wrap"><table><thead><tr><th>视频 / 时间</th><th>状态</th><th>评论内容</th><th>回执</th></tr></thead><tbody>${attempts.map((a) => `<tr><td>${e(a.video_id)}<small>${time(a.created)}</small></td><td>${badge(a.state)}</td><td class="wrap">${e(a.content)}</td><td class="wrap">${e(a.receipt.reason || "")}<small>${e(a.receipt.comment_id || "无评论ID")}</small></td></tr>`).join("")}</tbody></table></div>` : empty("本工作台还没有新发送记录", `已载入 ${s.history_count} 条历史接触记录用于去重。`)}</div><div class="panel spaced"><div class="panel-title"><h2>操作日志</h2></div><div class="event-list">${s.events.map((a) => `<div><span class="event-dot ${a.level === "risk" ? "danger" : ""}"></span><p>${e(a.message)}<small>${time(a.created)}</small></p></div>`).join("") || '<p class="muted">暂无操作记录</p>'}</div></div>`
+    `<div class="panel"><div class="panel-title"><h2>执行队列</h2><span>${rows.length} 项最近任务</span></div>${rows.length ? `<div class="table-wrap"><table><thead><tr><th>任务 / 账号</th><th>状态</th><th>当前进展</th><th>下一步时间</th><th></th></tr></thead><tbody>${rows.map((r) => `<tr><td><b>${e(r.snapshot.task.name)}</b><small>${e(r.snapshot.account.name)} · ${time(r.created)}</small></td><td>${badge(r.state)}</td><td class="wrap">${e(r.message || "等待执行")}<small>采集 ${r.progress.collected || 0} · 发布 ${r.progress.sent || 0} · 待处理 ${r.progress.pending?.length || 0} · 跳过 ${r.progress.skipped || 0}</small>${pendingSummary(r)}</td><td>${active(r) && r.due ? time(r.due) : "—"}</td><td>${runActions(r)}</td></tr>`).join("")}</tbody></table></div>` : empty("还没有执行记录", "完成配置后点击“一键执行”。")}</div><div class="panel spaced"><div class="panel-title"><h2>评论发送记录</h2><span>有回执才记为平台已接收</span></div>${attempts.length ? `<div class="table-wrap"><table><thead><tr><th>视频 / 时间</th><th>状态</th><th>评论内容</th><th>回执</th></tr></thead><tbody>${attempts.map((a) => `<tr><td>${e(a.video_id)}<small>${time(a.created)}</small></td><td>${badge(a.state)}</td><td class="wrap">${e(a.content)}</td><td class="wrap">${e(a.receipt.reason || "")}<small>${e(a.receipt.comment_id || "无评论ID")}</small></td></tr>`).join("")}</tbody></table></div>` : empty("本工作台还没有新发送记录", `已载入 ${s.history_count} 条历史接触记录用于去重。`)}</div><div class="panel spaced"><div class="panel-title"><h2>操作日志</h2></div><div class="event-list">${s.events.map((a) => `<div><span class="event-dot ${a.level === "risk" ? "danger" : ""}"></span><p>${e(a.message)}<small>${time(a.created)}</small></p></div>`).join("") || '<p class="muted">暂无操作记录</p>'}</div></div>`
   );
 }
 export function data(
@@ -209,7 +220,7 @@ export function taskForm(s, t = {}) {
       ["false", "停用"],
     ],
     String(t.enabled ?? true),
-  )}</div>${area("搜索关键词 · 每行一个", "keywords", (t.keywords || d.keywords || [""]).join("\n"), "最多10个关键词。关键词用于查找，正文与详情用于决定是否评论。")}<div class="form-grid">${field("每个关键词最多读取条数", "max_items", t.max_items || 10, "number", 'min="1" max="20" required')}${field("单次任务最多发布条数", "max_publish", t.max_publish || 1, "number", 'min="1" max="5" required')}${select(
+  )}</div>${area("搜索关键词 · 每行一个", "keywords", (t.keywords || d.keywords || [""]).join("\n"), "最多10个关键词。关键词用于查找，正文与详情用于决定是否评论。")}<div class="form-grid">${field("每个关键词最多读取条数", "max_items", t.max_items || 10, "number", 'min="1" max="20" required')}${select(
     "爬虫是否采集评论",
     "collect_comments",
     [

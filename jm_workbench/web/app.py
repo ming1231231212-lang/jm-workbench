@@ -17,6 +17,7 @@ from ..core.platforms import PLATFORMS
 from ..services.configuration import Configuration
 from ..services.engine import Engine
 from ..services.data_view import data_view
+from ..services.continuation import continue_pending
 from ..adapters.errors import LocalBrowserError, PlatformRisk
 from ..policies.rules import DEFAULTS
 from ..policies.comments import examples, target_description, ADULT_CORE
@@ -81,6 +82,9 @@ def create_app(home=None, worker=True, configuration=None):
         for row in runs:
             row['snapshot'] = json.loads(row['snapshot'])
             row['progress'] = json.loads(row['progress'])
+        continuations = {r['source_run_id']: r['run_id'] for r in store.rows('SELECT * FROM continuations')}
+        for row in runs:
+            row['continuation_id'] = continuations.get(row['id'])
         counts = {r['decision']: r['n'] for r in store.rows('SELECT decision,COUNT(*) n FROM evidence GROUP BY decision')}
         attempts = {r['state']: r['n'] for r in store.rows('SELECT state,COUNT(*) n FROM attempts GROUP BY state')}
         return {'name': APP_NAME, 'version': __version__, 'revision': cfg.code_revision, 'token': token,
@@ -140,6 +144,10 @@ def create_app(home=None, worker=True, configuration=None):
     def stop_one(ident: str):
         store.stop(ident)
         return {'message': '已停止此任务'}
+
+    @app.post('/api/runs/{ident}/continue')
+    def continue_run(ident: str):
+        return continue_pending(cfg, ident)
 
     @app.put('/api/settings')
     def settings(payload: SettingsInput):

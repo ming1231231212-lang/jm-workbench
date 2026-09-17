@@ -1,4 +1,4 @@
-import { escape as e, select, button } from "./ui.js";
+import { escape as e, select, button, field } from "./ui.js";
 
 export function commentFields(s, t = {}) {
   const kind = t.kind || "adult_comments",
@@ -6,7 +6,7 @@ export function commentFields(s, t = {}) {
   const mode =
     t.comment_mode ||
     (t.id || kind !== "adult_comments" ? "templates" : "core_variants");
-  return `<section class="comment-config"><div data-adult-fields>${select(
+  return `<section class="comment-config"><div data-publish-fields><div class="form-grid">${field("每个视频评论条数", "comments_per_video", 1, "number", 'min="1" max="1" readonly required')}${select("执行范围", "publish_scope", [["all_matches", "所有符合条件的视频"], ["limited", "只处理指定数量的视频"]], t.publish_scope || (t.id ? "limited" : "all_matches"))}</div><div data-publish-limit>${field("本任务最多评论几个视频", "max_publish", t.max_publish || 1, "number", 'min="1" max="5" required')}</div><p class="muted">每个视频只发1条。选择所有符合条件的视频时，达到每天限额会保留队列、自动顺延。</p></div><div data-adult-fields>${select(
     "成人用品评论范围",
     "adult_target",
     [
@@ -38,6 +38,8 @@ export function syncCommentFields(form) {
     adult && form.elements.comment_mode.value === "core_variants";
   for (const [selector, show] of [
     ["[data-adult-fields]", adult],
+    ["[data-publish-fields]", !crawler],
+    ["[data-publish-limit]", !crawler && form.elements.publish_scope.value === "limited"],
     ["[data-core-field]", generated],
     ["[data-templates-field]", !crawler && !generated],
     ["[data-comment-note]", !crawler],
@@ -59,11 +61,13 @@ export function taskPayload(values) {
   for (const key of [
     "max_items",
     "comments_per_item",
-    "max_publish",
     "start_hour",
     "end_hour",
   ])
     data[key] = Number(data[key]);
+  data.comments_per_video = Number(data.comments_per_video || 1);
+  data.max_publish = Number(data.max_publish || 1);
+  data.publish_scope = data.publish_scope || "all_matches";
   for (const key of ["keywords", "templates"])
     data[key] = (data[key] || "")
       .split("\n")
