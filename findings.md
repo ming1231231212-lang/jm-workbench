@@ -29,3 +29,8 @@ planning-with-files记录持续计划；brainstorming梳理架构；find-skills�
 
 旧max_publish同时出现在界面“单次任务最多发布条数”和执行器任务终止条件，设1会让首条成功后整个任务结束，pending仍在原进展中。用户明确其意思是每个合格视频1条；改为独立的comments_per_video和publish_scope，旧任务兼容，当前业务显式切换all_matches。
 补发必须排除历史已接触的视频；近7天相同作者或文案改为顺延，不清空候选、不更换文案来绕过限制。先保存搜索证据与原来源，再在实际发送时重新读取详情。
+
+
+## 历史批次不能只读取pending
+
+历史采集59条/发布0的批次在旧规则下59条证据均为skipped，progress却没有累计skipped，因此界面显示跳过0且pending为空。按当前规则复筛必须读取该run的原始搜索证据，不能把空pending视为从未采集，也不能把59条记录当成59个不同视频。此批次49个唯一视频中12个文字匹配，其中2个已接触、4个已在队列，仅6个需新增。原历史记录保持原样，后续来源通过continuations和batch_rechecks追溯。
