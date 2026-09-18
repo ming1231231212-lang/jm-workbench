@@ -33,6 +33,27 @@ npm test
 
 专用Chrome会复用已有登录状态；本机有`Codex-Chrome/Open-CodexChrome.ps1`时，启动器优先使用该入口。服务只监听127.0.0.1；不适合作为公网服务直接部署。
 
+## 后台自动恢复（Windows）
+
+启用后由Windows计划任务运行独立检查器，每30秒核验本机服务；服务停止、端口空闲且原执行器锁释放时自动拉起。当前用户登录Windows后会启动检查器，每分钟的重复触发用于检查器退出后的恢复。无需保存Windows密码或管理员权限。
+
+在项目目录执行：
+
+```powershell
+# 工作台已启动且健康时启用
+.\scripts\Manage-JMWatchdog.ps1 -Action Enable
+# 查看计划任务与最后一次检查结果
+.\scripts\Manage-JMWatchdog.ps1 -Action Status
+# 升级或维护前暂停自动恢复，保留正在运行的工作台
+.\scripts\Manage-JMWatchdog.ps1 -Action Disable
+```
+
+自动恢复只管理后台服务，不点击“一键执行”、不恢复用户停止的业务任务、不解除风险锁、不重发未知结果。排队/等待的视频原样保留；中断中的步骤仍按原恢复规则暂停。端口被其他服务占用、执行器锁未释放或业务代码发生变化时只记录原因，不强行杀进程。连续启动失败按30/60/120/240/300秒退避，稳定运行2分钟后重置。
+
+检查器通过`pythonw.exe`在后台运行，正常状态不弹窗、不发周期消息。检查状态和日志保存在`var/service-watchdog-state.json`、`var/service-watchdog.log`，服务启动日志在`var/service-watchdog-server.log`。电脑关机、休眠或用户尚未登录时不能执行本机任务；本功能不自动打开Chrome或重新登录平台。
+
+升级/备份前先Disable，确认检查状态为disabled后再停服务；业务升级后先正常启动并核验新版本，再Enable确认新的守护版本。
+
 ## 使用逻辑
 
 1. 添加平台账号。每个账号使用独立资料目录；打开浏览器登录后检查连接。
@@ -78,7 +99,7 @@ GitHub Actions在Python 3.11、Node 22上运行离线测试。推送代码不会
 
 ## 数据、迁移与备份
 
-本地配置、SQLite、运行参数及浏览器资料保存在`var/`；验收附件保存在`outputs/`。这两个目录均不上传GitHub。备份时先停止任务及服务，再备份`var/`和外部引用的浏览器资料目录。
+本地配置、SQLite、运行参数及浏览器资料保存在`var/`；验收附件保存在`outputs/`。这两个目录均不上传GitHub。备份时先禁用自动恢复、停止任务及服务，再备份`var/`和外部引用的浏览器资料目录。
 
 可用`python -m scripts.import_legacy --runtime <原爬虫目录> --profile <专用Chrome资料目录>`只读导入旧记录。迁入的候选只作为历史数据，不能直接触发评论；旧接触记录继续参与去重。`scripts/install_legacy_bridge.py`备份并将旧成人任务入口及F6入口改为观察JM队列，避免两套程序同时发布。
 

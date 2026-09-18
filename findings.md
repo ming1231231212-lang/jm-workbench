@@ -34,3 +34,10 @@ planning-with-files记录持续计划；brainstorming梳理架构；find-skills�
 ## 历史批次不能只读取pending
 
 历史采集59条/发布0的批次在旧规则下59条证据均为skipped，progress却没有累计skipped，因此界面显示跳过0且pending为空。按当前规则复筛必须读取该run的原始搜索证据，不能把空pending视为从未采集，也不能把59条记录当成59个不同视频。此批次49个唯一视频中12个文字匹配，其中2个已接触、4个已在队列，仅6个需新增。原历史记录保持原样，后续来源通过continuations和batch_rechecks追溯。
+
+
+## Windows后台守护
+
+当前普通用户可以注册自身Interactive/Limited任务，不需要管理员或密码。常驻检查器通过pythonw运行，系统登录触发与一分钟重触发负责其启动，IgnoreNew和独立文件锁避免重复。必须设置ExecutionTimeLimit为PT0S，否则系统默认会限制长期运行。
+健康检查绕过系统代理直连本机；此前代理可把端口拒绝连接包装为502，不能据此判断服务仍在。业务代码指纹仍固定，独立scripts改动不使已排队业务快照失效。服务恢复只调用原程序启动入口，不更改paused、unknown或risk。维护先禁用守护并等disabled状态，再停止服务。
+实测后台服务和检查器本身均自动恢复，发布记录未改变。健康状态以最近检查时间、守护状态及本机服务健康回执综合判断，不单看Windows上次重复触发返回码。

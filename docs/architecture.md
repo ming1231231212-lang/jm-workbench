@@ -118,3 +118,14 @@ sequenceDiagram
 仅允许合并到同一任务、同一账号、当前配置和代码版本完全一致且已结束搜索的等待补发队列；执行中的队列拒绝合并。原查询必须同时属于原任务与当前配置，准确视频/作者ID必须完整。对原批次视频去重，排除已接触或任何同平台活动队列里的视频；作者/文本间隔到期前保留等待。
 
 `--apply`使用单个立即事务检查版本、平台限制与未知回执，保存新候选、继承证据、batch_rechecks审计信息和continuations来源关联，重复调用只返回已有队列。旧pending按原顺序保留，新候选追加；实际发送仍完全经过现有执行器。维护脚本不改变运行代码与冻结快照，避免为一次批次补发中断已经等待的任务。
+
+
+## 后台服务守护（2026-09-18）
+
+`scripts/service_watchdog.py`与业务包分离，`scripts/Manage-JMWatchdog.ps1`负责启用/禁用/查看本机Windows任务。当前用户Interactive/Limited运行，无凭据存储；登录触发和每分钟重复触发，IgnoreNew与文件锁双重防止多检查器，ExecutionTimeLimit=PT0S保持常驻。业务revision未改变，已有快照不失效。
+
+检查器每30秒直连127.0.0.1健康入口（禁用代理），核对app_id、worker和预先确认的业务revision。正常只更新本机状态文件；仅在状态变化时记录日志。端口仍占用、健康内容异常、代码变更、数据库缺失、worker.lock仍锁定等情况不启动第二个执行器、不杀未知进程。确认为已停止时，以隐藏窗口启动原解释器和数据目录，验证健康回执；连续失败持久化退避，避免恢复风暴。
+
+检查器不连接业务数据库、不调用业务写接口。排队恢复由现有Engine/recover负责：waiting/queued保留，running暂停，reserved变unknown并锁平台；守护不自动解除这些状态。维护停用标记独立于业务“停止任务”，业务停止不会被守护反转。日志滚动且不记录Cookie或账号信息，配置和运行状态仅在var。
+
+Windows任务设置语义参考Microsoft官方文档：[任务设置](https://learn.microsoft.com/en-us/powershell/module/scheduledtasks/new-scheduledtasksettingsset)与[受限交互式主体](https://learn.microsoft.com/en-us/powershell/module/scheduledtasks/new-scheduledtaskprincipal)。
