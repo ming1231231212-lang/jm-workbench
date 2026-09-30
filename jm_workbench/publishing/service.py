@@ -55,11 +55,13 @@ class Publishing:
             CREATE UNIQUE INDEX IF NOT EXISTS publish_once ON publish_jobs(account_key,media_sha)
               WHERE state IN ('queued','running','paused','submitted','unknown');
             ''')
+            if 'sau_origin' not in {r['name'] for r in db.execute('PRAGMA table_info(publish_media)')}:
+                db.execute("ALTER TABLE publish_media ADD COLUMN sau_origin TEXT DEFAULT ''")
 
     def local_materials(self):
         return [{'id': 'local:' + r['id'], 'name': r['name'], 'size': r['size'], 'source': 'local',
                  'available': under(self.media, r['ref']).is_file(), '_path': str(under(self.media, r['ref'])),
-                 '_sha': r['sha'], '_file': r['sau_ref'], **json.loads(r['info'])}
+                 '_sha': r['sha'], '_file': r['sau_ref'] if r['sau_origin'] == dumps(self.integration()) else '', **json.loads(r['info'])}
                 for r in self.store.rows('SELECT * FROM publish_media ORDER BY created DESC')]
 
     def integration(self):
@@ -191,6 +193,7 @@ class Publishing:
         payload = json.loads(rows[0]['payload'])
         if payload['mode'] == 'scheduled' and payload['schedule_at'] <= self.clock():
             raise ValueError('定时时间已过，请编辑草稿后再执行')
+        integration = self.integration()
         catalog = self.catalog(strict=True)
         accounts = {a['id']: a for a in catalog['accounts']}
         materials = {m['id']: m for m in catalog['materials']}
@@ -224,6 +227,8 @@ class Publishing:
             raise ValueError('所选素材包含相同视频的重复副本，请只选择一个')
         now, created = self.clock(), []
         with self.store.connect(True) as db:
+            if self.integration() != integration:
+                raise ValueError('预检过程中发布服务配置发生变化，请重新执行')
             row = db.execute('SELECT state FROM publish_batches WHERE id=?', (ident,)).fetchone()
             if row['state'] != 'draft':
                 return {'id': ident, 'message': '该任务已加入队列'}
@@ -235,7 +240,7 @@ class Publishing:
                         raise ValueError('该账号已有相同视频的执行记录或队列，已阻止重复发布')
                     job_id = uid()
                     snapshot = {'account': account, 'material': material, 'content': payload,
-                                'revision': self.cfg.code_revision, 'integration': self.integration()}
+                                'revision': self.cfg.code_revision, 'integration': integration}
                     due = payload['schedule_at'] if payload['mode'] == 'scheduled' else now
                     db.execute('INSERT INTO publish_jobs(id,batch_id,platform,account_key,media_sha,state,snapshot,due,created,updated) VALUES(?,?,?,?,?,?,?,?,?,?)',
                                (job_id, ident, account['platform'], account['_key'], material['_sha'], 'queued', dumps(snapshot), due, now, now))
@@ -365,13 +370,13 @@ class Publishing:
                 try:
                     ref = material['_file']
                     if not ref and material['id'].startswith('local:'):
-                        saved = self.store.rows('SELECT sau_ref FROM publish_media WHERE id=?', (material['id'][6:],))
-                        ref = saved[0]['sau_ref'] if saved else ''
+                        saved = self.store.rows('SELECT sau_ref,sau_origin FROM publish_media WHERE id=?', (material['id'][6:],))
+                        ref = saved[0]['sau_ref'] if saved and saved[0]['sau_origin'] == dumps(snapshot['integration']) else ''
                     if not ref:
                         ref = self.bridge.upload(path)
                         if material['id'].startswith('local:'):
                             with self.store.connect() as db:
-                                db.execute('UPDATE publish_media SET sau_ref=? WHERE id=?', (ref, material['id'][6:]))
+                                db.execute('UPDATE publish_media SET sau_ref=?,sau_origin=? WHERE id=?', (ref, dumps(snapshot['integration']), material['id'][6:]))
                     if self.shutdown.is_set():
                         self._finish(job['id'], 'paused', '服务正在关闭，尚未调用发布')
                         return False

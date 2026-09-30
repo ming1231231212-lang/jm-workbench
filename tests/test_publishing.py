@@ -407,3 +407,16 @@ def test_changed_service_configuration_cannot_redirect_old_queue(setup):
     p.control(ident,'resume')
     p.tick()
     assert not b.sent and p.batches()[0]['state']=='paused'
+
+
+def test_changing_service_does_not_reuse_another_servers_media_reference(setup):
+    client,p,b,clock=setup
+    media=client.post('/api/publishing/materials/upload?name=x.mp4',content=b'video').json()['id']
+    launch(p,material_ids=[media]);p.tick()
+    assert len(b.uploads)==1 and p.local_materials()[0]['_file']
+    assert client.put('/api/publishing/settings',json=PublishingSettings(sau_url='http://127.0.0.1:5410').model_dump()).status_code==200
+    assert not p.local_materials()[0]['_file']
+    b.accounts.append(dict(b.accounts[0],id='sau:2',_key='other-account',_file='other.json'))
+    launch(p,request_id='second-service-job',material_ids=[media],account_ids=['sau:2'])
+    clock[0]+=1801;p.tick()
+    assert len(b.uploads)==2 and len(b.sent)==2

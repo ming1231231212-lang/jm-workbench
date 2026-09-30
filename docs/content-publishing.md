@@ -43,7 +43,7 @@ flowchart LR
 - `web/static/publishing.js`：发布任务、素材、表单、账号和设置；`workbench.css` 定义统一界面。主应用保留旧业务交互。
 - `publishing/sau_guard.py` + `scripts/install_sau_guard.py`：可备份、可重跑的 SAU 保护补丁。
 
-新增表：`publish_media` 保存本地路径引用、SHA-256、时长与 SAU 素材引用；`publish_batches` 保存草稿和幂等请求；`publish_jobs` 保存每个账号/视频的快照、状态、回执、计划时间及发送占位。原有业务表结构保持。
+新增表：`publish_media` 保存本地路径引用、SHA-256、时长与 SAU 素材引用；`sau_origin` 固定该缓存所属的服务地址和安装目录，切换服务不沿用旧缓存。`publish_batches` 保存草稿和幂等请求；`publish_jobs` 保存每个账号/视频的快照、状态、回执、计划时间及发送占位。原有业务表结构保持。
 
 状态：draft → queued → running → submitted / unknown / failed；未执行组合可 paused/resume/cancelled。同账号、相同视频内容不因换文件名、标题或重复点击而重发。源码版本、服务配置、账号引用/名称、文件摘要变化会阻止旧队列执行。默认同平台间隔 30 分钟、24 小时最多 5 次，由设置配置；这是本地执行限制，不是平台承诺的安全额度。
 
