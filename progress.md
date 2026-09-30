@@ -91,3 +91,5 @@
 2026-09-30：创建 codex/sau-integration worktree，生产工作台仍使用原版本。用户明确授权正式接入；不执行真实发布验收。
 
 2026-09-30：正式界面与 SAU 发布域完成。244 项 Python、30 项 Node、28 项 Chrome 交互验收通过，桌面/手机截图已检查。SAU 原发布循环存在超时后重复点击，已开发请求隔离保护、600 秒时限和 `/jmGuard` 握手；安装器备份后仅补丁指定方法，原有本地修改保留。实际 SAU Flask 环境以四个平台 stub 完成 5 项契约核验，真实发布为 0。正式 JM 备份部署及 GitHub 同步进行中。
+
+2026-09-30 交付：功能提交 2ef41e4 已上传原私有仓库，GitHub CI 36694395425 成功。正式 8776 已加载新版，SAU 防重复提交握手通过、3 个账号可读，发布新队列为 0；没有借验收给真实账号发视频或评论。原 objects/evidence/attempts/continuations/risk/reads/history 逐表一致；4 个运行仅 1 个 waiting 快照 revision 更新，pending 1 条、旧 112 条事件保留。watchdog 已重新绑定并报告 healthy。正式页面额外 9 项只读检查通过；已有标签页先只变更 hash 会保留旧脚本，已完整刷新后核验五入口。备份、截图和验收报告在 outputs/deployment-sau-20260930；临时测试标签关闭，用户原标签及最终预览保留。

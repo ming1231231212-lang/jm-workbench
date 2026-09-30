@@ -99,4 +99,4 @@ Windows后台自动恢复已安装并完成双恢复实测、回归与GitHub CI�
 演练准备时计划任务XML声明UTF-16而导出保存为UTF-8，解析检查拒绝；已改为UTF-16保存。未通过检查前没有停止服务。
 
 ## 2026-09-30：SAU 内容发布正式接入
-用户确认直接研发和接入。详细实施、测试和部署边界见 docs/content-publishing-plan.md。在独立 worktree 开发，生产代码暂不修改。
+用户确认直接研发和接入。详细实施、测试和部署边界见 docs/content-publishing-plan.md。已在独立 worktree 完成开发和测试，并备份后正式部署：244 Python、30 Node、28 Chrome 交互、9 正式只读、5 实际 SAU 模拟契约检查通过；原业务数据与队列保留，watchdog healthy。功能提交 2ef41e4 已上传 GitHub，CI 36694395425 成功。
