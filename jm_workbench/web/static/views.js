@@ -14,14 +14,15 @@ import { dataPage } from "./data-page.js";
 import { commentFields } from "./comment-fields.js";
 
 export const pages = [
-  ["overview", "◫", "工作概览"],
-  ["matrix", "▦", "任务矩阵"],
-  ["tasks", "☷", "任务配置"],
-  ["accounts", "◎", "账号管理"],
-  ["platforms", "⊞", "平台接入"],
-  ["data", "▤", "数据中心"],
-  ["runs", "◷", "运行记录"],
-  ["settings", "⚙", "工作台设置"],
+  ["tasks", "☷", "任务"],
+  ["publishing", "↗", "内容发布"],
+  ["data", "▤", "数据"],
+  ["accounts", "◎", "账号"],
+  ["settings", "⚙", "设置"],
+  ["overview", "◫", "工作概览", "tasks"],
+  ["matrix", "▦", "任务矩阵", "accounts"],
+  ["platforms", "⊞", "平台能力", "accounts"],
+  ["runs", "◷", "运行记录", "tasks"],
 ];
 const active = (r) => ["running", "queued", "waiting"].includes(r.state);
 const platformName = (s, id) =>
@@ -83,23 +84,61 @@ export function overview(s) {
   );
 }
 export function tasks(s) {
+  const running = s.runs.filter(active).length,
+    sent = s.attempt_counts.sent || 0;
+  const pending = s.runs
+    .filter(active)
+    .reduce((n, r) => n + (r.progress?.pending?.length || 0), 0);
+  const records = Object.values(s.counts).reduce((n, v) => n + v, 0);
   return (
     heading(
       "TASKS",
-      "任务配置",
-      "成人尾货、陪玩招募和爬虫各自配置，运行时不会串用关键词或模板。",
-      button("+ 新建任务", "new-task", "", "primary"),
-    ) + taskCards(s)
+      "任务",
+      "配置一次，随时执行。进度和结果都在这里。",
+      button("＋ 新建任务", "new-task", "", "primary"),
+    ) +
+    (s.risk.length
+      ? `<div class="alert red"><strong>部分平台已暂停</strong><span>${s.risk.map((r) => e(r.reason)).join("；")}</span><a href="#runs">查看原因 →</a></div>`
+      : "") +
+    `<section class="summary-strip"><div><span>执行中的任务</span><strong>${running}<small>项</small></strong></div><div><span>累计采集记录</span><strong>${records}<small>条</small></strong></div><div><span>评论平台已接收</span><strong>${sent}<small>条</small></strong></div><div><span>待处理的视频</span><strong>${pending}<small>条</small></strong></div></section><div class="section-heading"><h2>我的任务<span class="count-label">${s.tasks.length} 项</span></h2><a class="text-link" href="#runs">运行记录 →</a></div>` +
+    (s.tasks.length
+      ? `<div class="panel"><div class="table-wrap"><table class="task-list"><thead><tr><th>任务名称</th><th>平台 / 账号</th><th>运行状态</th><th>最近进度</th><th>操作</th></tr></thead><tbody>${s.tasks
+          .map((t) => {
+            const r = s.runs.find((r) => r.task_id === t.id),
+              p = r?.progress || {},
+              bindings = s.bindings.filter(
+                (b) => b.task_id === t.id && b.enabled,
+              );
+            return `<tr><td><div class="task-title-cell"><span class="task-kind ${t.kind}">${t.kind === "adult_comments" ? "货" : t.kind === "peiwang_comments" ? "伴" : "采"}</span><div><b>${e(t.name)}</b><small>${e(t.keywords.slice(0, 3).join(" / "))}</small></div></div></td><td>${e(platformName(s, t.platform))}<small>${bindings.length} 个账号已关联</small></td><td>${badge(!t.enabled ? "已停用" : r?.state || "待执行")}<small>${t.kind === "crawler" ? "按关键词采集" : `${t.start_hour}:00–${t.end_hour}:00`}</small></td><td><span class="task-progress">采集 <b>${p.collected || 0}</b> · 发布 <b>${p.sent || 0}</b></span><small>${p.pending?.length || 0} 条待处理 · ${p.skipped || 0} 条跳过</small></td><td><div class="row-actions">${r && active(r) ? button("停止", "stop-run", r.id, "small") : button("启动", "launch", t.id, "small")}${button("配置", "edit-task", t.id, "quiet")}<a class="button quiet" href="#runs">记录</a></div></td></tr>`;
+          })
+          .join(
+            "",
+          )}</tbody></table></div><div class="panel-caption">每个视频只发1条评论；所有通过筛选的视频按配置依次执行。</div></div>`
+      : empty(
+          "创建你的第一项任务",
+          "选择业务、填写关键词、关联账号，即可执行。",
+          button("新建任务", "new-task", "", "primary"),
+        )) +
+    `<div class="section-heading spaced"><h2>最近动态</h2><a class="text-link" href="#runs">查看全部 →</a></div><div class="panel event-list">${
+      s.events
+        .slice(0, 3)
+        .map(
+          (v) =>
+            `<div><span class="event-dot ${v.level === "risk" ? "danger" : ""}"></span><p>${e(v.message)}<small>${time(v.created)}</small></p></div>`,
+        )
+        .join("") || '<p class="muted">任务启动后，执行进度会显示在这里。</p>'
+    }</div>`
   );
 }
 export function accounts(s) {
   return (
     heading(
       "ACCOUNTS",
-      "账号管理",
-      "每个账号使用独立的浏览器资料目录。先打开浏览器登录，再检查连接。",
+      "账号",
+      "评论、采集和内容发布的账号，在这里统一查看。",
       button("+ 添加账号", "new-account", "", "primary"),
     ) +
+    `<div class="section-heading"><h2>评论与采集账号</h2><div class="row-actions"><a class="button small" href="#matrix">任务矩阵</a><a class="button quiet small" href="#platforms">平台能力</a></div></div>` +
     (s.accounts.length
       ? `<div class="account-grid">${s.accounts.map((a) => `<article class="panel account-card"><div class="card-top"><span class="avatar">${e(a.name.slice(0, 1))}</span>${badge(a.connection)}</div><h3>${e(a.name)}</h3><p>${e(platformName(s, a.platform))}${a.enabled ? "" : " · 已停用"}</p><dl><dt>身份核验</dt><dd>${a.identity ? "已绑定固定身份" : "运行时检查平台登录"}</dd><dt>上次检查</dt><dd>${time(a.checked_at)}</dd></dl><details><summary>浏览器资料目录</summary><code>${e(a.profile_dir)}</code></details><div class="card-footer">${button("打开浏览器", "open-account", a.id)}${button("检查连接", "check-account", a.id, "primary")}${button("编辑", "edit-account", a.id, "quiet")}</div></article>`).join("")}</div>`
       : empty(
@@ -163,7 +202,7 @@ function runActions(r) {
 }
 function pendingSummary(r) {
   if (!r.progress.source_run_id) return "";
-  return `<small>原队列 ${r.progress.selected_count} 个 · 接入 ${r.progress.imported_count} 个 · 每个视频1条</small><details><summary>查看剩余与跳过原因</summary>${(r.progress.pending || []).map(p => `<small>${e(p.video_id)} · ${e(p.wait_reason || "待详情核验")} · 最早 ${time(Math.max(p.not_before || 0, r.due || 0))}</small>`).join("")}${(r.progress.skipped_targets || []).map(p => `<small>${e(p.video_id)} · 已跳过：${e(p.reason)}</small>`).join("")}</details>`;
+  return `<small>原队列 ${r.progress.selected_count} 个 · 接入 ${r.progress.imported_count} 个 · 每个视频1条</small><details><summary>查看剩余与跳过原因</summary>${(r.progress.pending || []).map((p) => `<small>${e(p.video_id)} · ${e(p.wait_reason || "待详情核验")} · 最早 ${time(Math.max(p.not_before || 0, r.due || 0))}</small>`).join("")}${(r.progress.skipped_targets || []).map((p) => `<small>${e(p.video_id)} · 已跳过：${e(p.reason)}</small>`).join("")}</details>`;
 }
 export function runs(s, attempts = []) {
   const rows = s.runs;

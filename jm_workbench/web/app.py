@@ -21,24 +21,32 @@ from ..services.continuation import continue_pending
 from ..adapters.errors import LocalBrowserError, PlatformRisk
 from ..policies.rules import DEFAULTS
 from ..policies.comments import examples, target_description, ADULT_CORE
+from ..publishing.service import Publishing
+from ..publishing.api import router as publishing_router
+from ..publishing.models import MAX_UPLOAD
 
 
-def create_app(home=None, worker=True, configuration=None):
+def create_app(home=None, worker=True, configuration=None, publishing_bridge=None):
     config = Config(home)
     store = Store(config.home/'jm.db')
     cfg = configuration or Configuration(config, store)
     config, store = cfg.config, cfg.store
     engine, token = Engine(cfg), secrets.token_urlsafe(32)
+    publisher = Publishing(cfg, bridge=publishing_bridge)
 
     @asynccontextmanager
     async def lifespan(app):
         if worker:
             engine.start()
+            publisher.start()
         yield
+        publisher.close()
         engine.close()
 
     app = FastAPI(title=APP_NAME, version=__version__, lifespan=lifespan, docs_url=None, redoc_url=None)
     app.state.cfg, app.state.engine = cfg, engine
+    app.state.publisher = publisher
+    app.include_router(publishing_router(publisher))
 
     @app.middleware('http')
     async def local_only(request, call_next):
@@ -52,11 +60,18 @@ def create_app(home=None, worker=True, configuration=None):
                 return JSONResponse({'error': '请求来源无效，请刷新工作台后重试'}, status_code=403)
             if revision() != cfg.code_revision:
                 return JSONResponse({'error': '代码已更新，请重新启动工作台加载新版本'}, status_code=409)
-            if len(await request.body()) > 32768:
+            if request.url.path == '/api/publishing/materials/upload':
+                try:
+                    length = int(request.headers.get('content-length', '0'))
+                except ValueError:
+                    return JSONResponse({'error': '文件长度无效'}, status_code=400)
+                if length < 0 or length > MAX_UPLOAD:
+                    return JSONResponse({'error': '单个视频最多150MB'}, status_code=413)
+            elif len(await request.body()) > 32768:
                 return JSONResponse({'error': '配置过大'}, status_code=413)
         response = await call_next(request)
         response.headers['X-Content-Type-Options'] = 'nosniff'
-        response.headers['Content-Security-Policy'] = "default-src 'self'; script-src 'self'; style-src 'self'; img-src 'self' data:; connect-src 'self'; frame-ancestors 'none'; base-uri 'none'; form-action 'self'"
+        response.headers['Content-Security-Policy'] = "default-src 'self'; script-src 'self'; style-src 'self'; img-src 'self' data:; media-src 'self' blob:; connect-src 'self'; frame-ancestors 'none'; base-uri 'none'; form-action 'self'"
         response.headers['Cache-Control'] = 'no-store'
         if response.headers.get('content-type', '').startswith('application/json'):
             response.headers['Content-Type'] = 'application/json; charset=utf-8'
@@ -138,6 +153,8 @@ def create_app(home=None, worker=True, configuration=None):
     @app.post('/api/stop')
     def stop():
         store.stop()
+        with store.connect(True) as db:
+            db.execute("UPDATE publish_jobs SET state='paused',message='用户停止全部任务' WHERE state='queued'")
         return {'message': '已停止任务；进行中的请求结束后不会执行下一步'}
 
     @app.post('/api/runs/{ident}/stop')
@@ -161,6 +178,8 @@ def create_app(home=None, worker=True, configuration=None):
     def clear_risk(platform: str, payload: ClearRiskInput):
         if store.rows("SELECT 1 FROM attempts WHERE platform=? AND state IN ('reserved','unknown')", (platform,)):
             raise ValueError('仍有未确认的发送结果，不能解除；请核实发送记录后处理')
+        if store.rows("SELECT 1 FROM publish_jobs WHERE platform=? AND state IN ('running','unknown')", (platform,)):
+            raise ValueError('内容发布仍有进行中或未确认的结果，不能解除平台限制')
         with store.connect(True) as db:
             db.execute('DELETE FROM risk WHERE platform=?', (platform,))
         store.event('用户确认平台问题已处理：' + payload.note)

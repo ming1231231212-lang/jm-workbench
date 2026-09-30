@@ -1,6 +1,12 @@
 import * as views from "./views.js";
 import { escape as e } from "./ui.js";
 import {
+  PublishingUI,
+  publishingPage,
+  publishingAccounts,
+  publishingSettings,
+} from "./publishing.js";
+import {
   syncCommentFields,
   taskPayload,
   previewMarkup,
@@ -17,6 +23,14 @@ let state,
   loading = false;
 const content = document.querySelector("#content"),
   dialog = document.querySelector("#dialog");
+const publishing = new PublishingUI({
+  request,
+  token: () => state?.token || "",
+  toast,
+  render,
+  showForm,
+  dialog,
+});
 function toast(text, error = false) {
   const box = document.querySelector("#toast");
   box.textContent = text;
@@ -48,20 +62,34 @@ async function request(path, body, method = "POST") {
   return result;
 }
 async function render() {
-  page = location.hash.slice(1) || "overview";
-  if (!views.pages.some((p) => p[0] === page)) page = "overview";
+  page = location.hash.slice(1) || "tasks";
+  if (!views.pages.some((p) => p[0] === page)) page = "tasks";
+  const route = views.pages.find((p) => p[0] === page),
+    activePage = route[3] || page;
   document.querySelector("#page-label").textContent = views.pages.find(
     (p) => p[0] === page,
   )[2];
   document.querySelector("#nav").innerHTML = views.pages
+    .filter((p) => !p[3])
     .map(
       ([id, icon, title]) =>
-        `<a href="#${id}" class="${id === page ? "active" : ""}" ${id === page ? 'aria-current="page"' : ""}><span>${icon}</span>${title}</a>`,
+        `<a href="#${id}" class="${id === activePage ? "active" : ""}" ${id === activePage ? 'aria-current="page"' : ""}><span>${icon}</span>${title}</a>`,
     )
     .join("");
   document.querySelector("#version").textContent =
     "v" + state.version + " · " + state.revision.slice(0, 8);
-  if (page === "data") {
+  document.querySelector('[data-action="launch"]').hidden =
+    activePage !== "tasks";
+  if (page === "publishing") {
+    const data = await publishing.load();
+    content.innerHTML = publishingPage(data, publishing.tab, publishing.filter);
+  } else if (page === "accounts") {
+    content.innerHTML =
+      views.accounts(state) + publishingAccounts(await publishing.load());
+  } else if (page === "settings") {
+    content.innerHTML =
+      views.settings(state) + publishingSettings(await publishing.load());
+  } else if (page === "data") {
     const result = await request(
       `/api/data?page=${dataPage}&q=${encodeURIComponent(q)}&decision=${encodeURIComponent(decision)}&batch=${encodeURIComponent(dataBatch)}&category=${encodeURIComponent(dataCategory)}`,
     );
@@ -97,6 +125,7 @@ function showForm(html) {
 async function action(name, id) {
   if (name === "close-dialog") return dialog.close();
   if (name === "refresh") return refresh(true);
+  if (name.startsWith("pub-")) return publishing.handle(name, id);
   if (name === "preview-comment") {
     const form = document.querySelector("#task-form");
     if (!form.reportValidity()) return;
@@ -189,6 +218,27 @@ document.addEventListener("click", async (event) => {
 });
 document.addEventListener("change", async (event) => {
   const el = event.target;
+  if (el.matches("[data-pub-upload]")) {
+    if (busy) return;
+    busy = true;
+    try {
+      await publishing.upload(el.files);
+    } catch (ex) {
+      toast(ex.message, true);
+    } finally {
+      busy = false;
+      el.value = "";
+    }
+    return;
+  }
+  if (el.matches("[data-pub-filter]") || el.form?.id === "pub-form") {
+    try {
+      await publishing.change(el);
+    } catch (ex) {
+      toast(ex.message, true);
+    }
+    return;
+  }
   if (el.matches("[data-binding]")) {
     if (busy) {
       el.checked = !el.checked;
@@ -254,7 +304,14 @@ document.addEventListener("submit", async (event) => {
   const data = Object.fromEntries(new FormData(form)),
     id = form.dataset.id;
   try {
-    if (form.id === "task-form") {
+    if (
+      form.id === "pub-form" ||
+      form.id === "pub-settings-form" ||
+      form.id === "pub-resolve-form"
+    ) {
+      await publishing.submit(form, event.submitter);
+      return;
+    } else if (form.id === "task-form") {
       await request(
         "/api/tasks" + (id ? "/" + id : ""),
         taskPayload(data),
@@ -292,7 +349,10 @@ setInterval(() => {
     !busy &&
     !dialog.open &&
     document.visibilityState === "visible" &&
-    ["overview", "runs", "platforms"].includes(page)
+    !["INPUT", "TEXTAREA", "SELECT"].includes(
+      document.activeElement?.tagName,
+    ) &&
+    ["tasks", "publishing", "overview", "runs", "platforms"].includes(page)
   )
     refresh().catch(() => {});
 }, 10000);
