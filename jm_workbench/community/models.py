@@ -33,6 +33,9 @@ class CommunityPost(BaseModel):
     tags: list[str] = Field(default_factory=list,max_length=4)
     targets: list[Target] = Field(min_length=1,max_length=20)
     schedule_at: float = 0
+    kind: Literal['thread','reply'] = 'thread'
+    source_title: str = Field(default='',max_length=200)
+    source_excerpt: str = Field(default='',max_length=6000)
 
     @field_validator('schedule_at')
     @classmethod

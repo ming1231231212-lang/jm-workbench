@@ -5,10 +5,10 @@ import subprocess
 import urllib.error
 import urllib.request
 from pathlib import Path
-from urllib.parse import urlencode, urlparse
+from urllib.parse import urlencode, urlparse, parse_qs
 from ..adapters.chrome import endpoint
 from ..adapters.errors import LocalBrowserError
-from .registry import platform, compose_url, safe_post_url, destination
+from .registry import platform, compose_url, safe_post_url, destination, tieba_thread_url
 
 
 class NotSubmitted(ValueError):
@@ -125,6 +125,63 @@ def tieba_fill_and_submit(page, payload, expected, target):
     return tieba_receipt(response.json())
 
 
+def tieba_reply_receipt(data,target):
+    inner=data.get('data') if isinstance(data.get('data'),dict) else {}
+    if any(c is not None and str(c)!='0' for c in (data.get('errno'),data.get('error_code'),inner.get('error_code'))):
+        raise NotSubmitted('贴吧拒绝评论或要求安全验证，已停止；请到网站处理')
+    post=inner.get('post') or data.get('post') or {}
+    ident=inner.get('pid') or data.get('pid') or post.get('id')
+    if not ident or not re.fullmatch(r'[1-9][0-9]*',str(ident)):
+        raise RuntimeError('贴吧未返回明确评论编号，结果不明')
+    url=tieba_thread_url(target)
+    return {'post_id':str(ident),'comment_id':str(ident),'thread_id':url.rsplit('/',1)[-1],
+            'url':url+'?pid='+str(ident)+'#'+str(ident),'visibility':'unverified'}
+
+
+def tieba_reply_and_submit(page,payload,expected,target):
+    target=tieba_thread_url(target)
+    if tieba_thread_url(page.url)!=target or tieba_identity(page)!=expected:
+        raise NotSubmitted('评论目标或贴吧身份发生变化，未提交')
+    for selector in ('iframe[src*="captcha"]','iframe[src*="verify"]','.geetest_panel','.vcode-dialog'):
+        if page.locator(selector).count() and page.locator(selector).first.is_visible():
+            raise NotSubmitted('贴吧要求安全验证，评论已停止')
+    box=page.locator('.pc-pb-reply-box')
+    editor=box.locator('#tb-editor-pb-content .ql-editor[contenteditable="true"]:visible')
+    if not editor.count():
+        launcher=box.locator('.box:visible')
+        if launcher.count()!=1:raise NotSubmitted('此帖回复入口不可用，未提交')
+        launcher.click(timeout=5000)
+    try:editor.wait_for(state='visible',timeout=8000)
+    except Exception:raise NotSubmitted('此帖无法打开回复编辑器，未提交') from None
+    submit=box.locator('.publish-btn:visible')
+    if editor.count()!=1 or submit.count()!=1:raise NotSubmitted('回复编辑器发生变化，未提交')
+    if editor.inner_text().strip():raise NotSubmitted('回复编辑器已有内容，已保留，未提交')
+    editor.fill(payload['body'])
+    if editor.inner_text().strip()!=payload['body'].strip():raise NotSubmitted('评论正文核对失败，未提交')
+    if tieba_identity(page)!=expected or tieba_thread_url(page.url)!=target:
+        raise NotSubmitted('提交前账号或目标变化，未提交')
+    count=[0];blocked=[False]
+    def once(route):
+        if route.request.method!='POST':return route.fallback()
+        count[0]+=1
+        try:
+            raw=route.request.post_data or ''
+            data=json.loads(raw) if raw.lstrip().startswith('{') else {k:v[0] for k,v in parse_qs(raw).items()}
+            valid=str(data.get('tid',''))==target.rsplit('/',1)[-1] and not any(data.get(k) for k in ('quote_id','repostid','sub_post_id'))
+        except Exception:valid=False
+        if count[0]>1:return route.abort('blockedbyclient')
+        if not valid:
+            blocked[0]=True;return route.abort('blockedbyclient')
+        route.fallback()
+    page.route('**/c/c/post/add_pc*',once)
+    with page.expect_response(lambda r:urlparse(r.url).hostname=='tieba.baidu.com' and urlparse(r.url).path=='/c/c/post/add_pc' and r.request.method=='POST',timeout=25000) as waiting:
+        submit.click(timeout=10000)
+    response=waiting.value
+    if response.status in (400,401,403,422,429):raise NotSubmitted('贴吧拒绝评论请求，已暂停本平台')
+    if not response.ok or blocked[0]:raise RuntimeError('贴吧评论结果不明')
+    return tieba_reply_receipt(response.json(),target)
+
+
 class CommunityAdapter:
     def __init__(self, config, transport=http_json):
         self.config,self.transport=config,transport
@@ -150,7 +207,10 @@ class CommunityAdapter:
 
     def publish(self, account, secret, payload, target):
         p=account['platform']
-        destination(p,target)
+        if payload.get('kind')=='reply':
+            if p!='tieba':raise NotSubmitted('该平台尚未适配评论发布')
+            target=tieba_thread_url(target)
+        else:destination(p,target)
         if p=='tieba':return self.tieba(account,payload,target)
         if p not in ('dev','x','reddit','huggingface'):raise NotSubmitted('此平台尚未实现自动提交，请使用网页发布')
         headers=self.headers(account,secret)
@@ -205,6 +265,8 @@ class CommunityAdapter:
                 page.locator('.pc-main-page-layout').wait_for(state='visible',timeout=10000)
                 identity=tieba_identity(page)
                 if identity!=account['identity']:raise NotSubmitted('贴吧登录身份变化')
+                if payload.get('kind')=='reply':
+                    return tieba_reply_and_submit(page,payload,account['identity'],target)
                 return tieba_fill_and_submit(page,payload,account['identity'],target)
             finally:
                 # This page was created by this attempt. Close to prevent the site's

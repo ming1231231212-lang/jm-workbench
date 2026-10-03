@@ -3,14 +3,22 @@ import json
 import sqlite3
 import threading
 import time
+import unicodedata
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from ..core.db import dumps, uid
 from ..core.config import revision
 from .adapters import CommunityAdapter, NotSubmitted
-from .registry import PLATFORMS, platform, destination, compose_url, safe_post_url
+from .registry import PLATFORMS, platform, destination, compose_url, safe_post_url, tieba_thread_url
 from .secrets import seal, unseal
 
 ACTIVE = ('queued','running','paused','unknown','manual')
+SHANGHAI = timezone(timedelta(hours=8))
+
+
+def content_key(text):
+    value=''.join(c for c in unicodedata.normalize('NFKC',text).casefold() if c.isalnum())
+    return hashlib.sha256(value.encode()).hexdigest()
 
 
 class Community:
@@ -30,6 +38,8 @@ class Community:
             CREATE UNIQUE INDEX IF NOT EXISTS community_once ON community_jobs(platform,identity,digest)
               WHERE state IN ('queued','running','paused','submitted','unknown','manual','recorded');
             CREATE TABLE IF NOT EXISTS community_risk(platform TEXT PRIMARY KEY, reason TEXT, created REAL);
+            CREATE TABLE IF NOT EXISTS community_claims(platform TEXT, identity TEXT, scope TEXT,
+              value TEXT, job_id TEXT, created REAL, PRIMARY KEY(platform,identity,scope,value));
             ''')
 
     def account(self,ident,private=False):
@@ -140,10 +150,12 @@ class Community:
                     raw=db.execute('SELECT * FROM community_accounts WHERE id=?',(t['account_id'],)).fetchone()
                     if not raw:raise ValueError('社区账号不存在')
                     a={**json.loads(raw['data']),'id':raw['id'],'version':raw['version'],'identity':raw['identity'],'checked':raw['checked']}
-                    p=platform(a['platform']);dest=destination(a['platform'],t['destination'])
+                    kind=payload.get('kind','thread')
+                    if kind=='reply' and a['platform']!='tieba':raise ValueError('当前仅百度贴吧支持评论发布')
+                    p=platform(a['platform']);dest=tieba_thread_url(t['destination']) if kind=='reply' else destination(a['platform'],t['destination'])
                     if not a['enabled']:raise ValueError(a['name']+'：账号已停用')
                     if len(payload['title'])>p['title_limit']:raise ValueError(p['name']+'标题过长')
-                    if a['platform']=='tieba' and (len(payload['title'])<5 or len(payload['body'])>2000):raise ValueError('贴吧标题需5–31字，正文最多2000字')
+                    if a['platform']=='tieba' and ((kind=='thread' and len(payload['title'])<5) or len(payload['body'])>2000):raise ValueError('贴吧标题需5–31字，正文最多2000字')
                     if a['platform']=='x' and len(payload['title']+'\n\n'+payload['body'])>280:raise ValueError('X标题与正文合计最多280字符')
                     if a['platform']=='huggingface' and len(payload['title'])<3:raise ValueError('Hub标题至少3个字符')
                     if a['platform']=='dev' and payload['body'].lstrip().startswith('---'):raise ValueError('DEV正文不能以YAML配置头开头')
@@ -154,7 +166,13 @@ class Community:
                     identity=a['identity'] or 'manual:'+a['id']
                     digest=hashlib.sha256(dumps([dest,payload['title'],payload['body'],payload['tags']]).encode()).hexdigest()
                     snapshot={'account':a,'payload':payload,'destination':dest,'revision':self.cfg.code_revision}
-                    planned.append((uid(),ident,a['platform'],a['id'],identity,digest,'queued' if p['automatic'] else 'manual',dumps(snapshot),max(now,payload['schedule_at']),now,now))
+                    job_id=uid()
+                    if a['platform']=='tieba':
+                        keys=[('content',content_key(payload['body']))]
+                        if kind=='reply':keys.append(('reply_target',dest))
+                        for scope,value in keys:
+                            db.execute('INSERT INTO community_claims VALUES(?,?,?,?,?,?)',(a['platform'],identity,scope,value,job_id,now))
+                    planned.append((job_id,ident,a['platform'],a['id'],identity,digest,'queued' if p['automatic'] else 'manual',dumps(snapshot),max(now,payload['schedule_at']),now,now))
                 db.executemany('INSERT INTO community_jobs(id,post_id,platform,account_id,identity,digest,state,snapshot,due,created,updated) VALUES(?,?,?,?,?,?,?,?,?,?,?)',planned)
                 db.execute("UPDATE community_posts SET state='active',updated=? WHERE id=?",(now,ident))
         except sqlite3.IntegrityError:
@@ -175,7 +193,7 @@ class Community:
             r['payload']=json.loads(r['payload']);r['jobs']=self.jobs(r['id']);posts.append(r)
         return {'platforms':list(PLATFORMS.values()),'accounts':[self.account(r['id']) for r in self.store.rows('SELECT id FROM community_accounts ORDER BY rowid')],
                 'posts':posts,'risk':self.store.rows('SELECT * FROM community_risk'),
-                'worker':bool(self.thread and self.thread.is_alive()),'limits':{'interval_seconds':1800,'per_platform_24h':5}}
+                'worker':bool(self.thread and self.thread.is_alive()),'limits':{'interval_seconds':1800,'per_platform_24h':5,'tieba':{'per_24h':6,'threads_per_day':1,'replies_per_day':5,'timezone':'Asia/Shanghai'}}}
 
     def control(self,ident,action):
         now=self.clock()
@@ -268,7 +286,14 @@ class Community:
             if not raw or raw['version']!=s['account']['version'] or not json.loads(raw['data'])['enabled'] or s['revision']!=self.cfg.code_revision:
                 db.execute("UPDATE community_jobs SET state='paused',message='配置或代码版本已改变，请新建草稿' WHERE id=?",(job['id'],));return
             recent=list(db.execute("SELECT started FROM community_jobs WHERE platform=? AND started>? ORDER BY started DESC",(p,now-86400)))
-            due=max((recent[0]['started']+1800 if recent else now),(recent[4]['started']+86400 if len(recent)>=5 else now))
+            limit=6 if p=='tieba' else 5
+            due=max((recent[0]['started']+1800 if recent else now),(recent[limit-1]['started']+86400 if len(recent)>=limit else now))
+            if p=='tieba':
+                midnight=datetime.fromtimestamp(now,SHANGHAI).replace(hour=0,minute=0,second=0,microsecond=0)
+                today=list(db.execute("SELECT snapshot FROM community_jobs WHERE platform='tieba' AND started>=?",(midnight.timestamp(),)))
+                kind=s['payload'].get('kind','thread')
+                used=sum(json.loads(r['snapshot'])['payload'].get('kind','thread')==kind for r in today)
+                if used>=(1 if kind=='thread' else 5):due=max(due,(midnight+timedelta(days=1)).timestamp())
             if due>now:
                 db.execute("UPDATE community_jobs SET due=?,message='等待平台共享发布间隔/每日额度' WHERE id=?",(due,job['id']));return
             db.execute("UPDATE community_jobs SET state='running',started=?,updated=?,message='正在检查账号并提交' WHERE id=?",(now,now,job['id']))

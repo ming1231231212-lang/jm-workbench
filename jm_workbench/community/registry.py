@@ -56,12 +56,22 @@ def destination(platform_id, value):
 def compose_url(platform_id, target=''):
     p = platform(platform_id)
     if platform_id=='tieba' and target:
+        if target.startswith('https://'):
+            return tieba_thread_url(target)
         return 'https://tieba.baidu.com/f?kw='+quote(destination(platform_id,target))
     if platform_id=='reddit' and target:
         return 'https://www.reddit.com/r/'+destination(platform_id,target)+'/submit'
     if platform_id=='v2ex' and target:
         return 'https://www.v2ex.com/new/'+destination(platform_id,target)
     return p['compose']
+
+
+def tieba_thread_url(value):
+    parsed=urlparse(value.strip())
+    if (parsed.scheme!='https' or parsed.hostname!='tieba.baidu.com' or parsed.username or
+        parsed.password or parsed.port not in (None,443) or not re.fullmatch(r'/p/[1-9][0-9]{3,19}',parsed.path)):
+        raise ValueError('请填写百度贴吧主题帖HTTPS链接，如 https://tieba.baidu.com/p/123456')
+    return 'https://tieba.baidu.com'+parsed.path
 
 
 def safe_post_url(platform_id, value):

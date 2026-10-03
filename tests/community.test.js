@@ -16,6 +16,11 @@ test('invalid account selection and scheduling rejected',()=>{
 });
 
 const platform={id:'tieba',name:'百度贴吧',categories:'AI 互联网',region:'国内',mode:'browser',mode_label:'浏览器发布',automatic:true,format:'主题帖',note:'需登录'};
+test('replies have a separate view with original target and full escaped body',()=>{
+ const data={platforms:[platform],accounts:[],risk:[],posts:[{id:'reply',created:1,state:'draft',payload:{kind:'reply',title:'评论说明',body:'内容<script>unsafe</script>',source_title:'原始问题',targets:[{destination:'https://tieba.baidu.com/p/123456'}]},jobs:[]}]};
+ const html=communityPage(data,'replies');assert.match(html,/原始问题/);assert.match(html,/内容&lt;script&gt;/);
+ assert.ok(!communityPage(data,'posts').includes('内容&lt;script&gt;'));
+});
 test('community rendering escapes untrusted titles and messages',()=>{
  const data={platforms:[platform],accounts:[],risk:[],posts:[{id:'p',state:'active',created:1,payload:{title:'<img src=x onerror=alert(1)>',targets:[{}]},jobs:[{id:'j',platform:'tieba',account_name:'<script>',destination:'AI',state:'unknown',message:'<iframe>',receipt:{}}]}]};
  const output=communityPage(data);
