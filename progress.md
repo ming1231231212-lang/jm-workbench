@@ -100,3 +100,5 @@
 已只读检查生产健康和代码，在outputs/community-integration独立worktree、codex/community-publishing分支开发。
 
 社区模块新增36项Python测试通过；完整Python回归281通过；Node34通过；社区Chrome18项、原发布Chrome28项通过。真实平台发送0。生产只读状态为3个completed、1个paused、10条sent，视频发布队列为空。
+
+正式部署完成：原12张表SHA256逐表一致，4个历史运行、418条证据、10条发送记录保留；新增社区账号1，社区帖子0。正式UI5项检查通过，watchdog healthy。贴吧网页要求百度安全验证，等待用户本人完成登录后只读检查。
