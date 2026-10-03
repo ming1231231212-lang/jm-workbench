@@ -16,6 +16,10 @@ class NotSubmitted(ValueError):
     """Definitively no write, e.g. failed preflight or explicit API rejection."""
 
 
+class PreflightStopped(NotSubmitted):
+    """Local read-only preparation stopped before the submission helper was called."""
+
+
 class NoRedirect(urllib.request.HTTPRedirectHandler):
     def redirect_request(self, *args, **kwargs):
         return None
@@ -66,6 +70,18 @@ def tieba_existing_identity(context):
     if len(identities)>1:raise NotSubmitted('多个贴吧页面的身份不一致，请刷新账号页面后重新检查')
     if identities:return identities.pop()
     raise NotSubmitted(message)
+
+
+def tieba_wait_identity(page,expected,timeout=10000):
+    """The Vue root can precede the asynchronous userStore login response."""
+    deadline=time.monotonic()+timeout/1000
+    while True:
+        try:actual=tieba_identity(page)
+        except NotSubmitted:
+            if time.monotonic()>=deadline:raise PreflightStopped('新页面登录状态未就绪，尚未填写或提交；请检查账号页面') from None
+            page.wait_for_timeout(200);continue
+        if actual!=expected:raise PreflightStopped('新页面登录身份不一致，未提交')
+        return actual
 
 
 def tieba_receipt(data):
@@ -304,10 +320,12 @@ class CommunityAdapter:
             if payload is None:return tieba_existing_identity(context)
             page=context.new_page()
             try:
-                page.goto(compose_url('tieba',target),wait_until='domcontentloaded',timeout=20000)
-                page.locator('.pc-main-page-layout').wait_for(state='visible',timeout=10000)
-                identity=tieba_identity(page)
-                if identity!=account['identity']:raise NotSubmitted('贴吧登录身份变化')
+                try:
+                    page.goto(compose_url('tieba',target),wait_until='domcontentloaded',timeout=20000)
+                    page.locator('.pc-main-page-layout').wait_for(state='visible',timeout=10000)
+                    tieba_wait_identity(page,account['identity'])
+                except PreflightStopped:raise
+                except Exception:raise PreflightStopped('账号页面加载未完成，尚未调用发布操作') from None
                 if payload.get('kind')=='reply':
                     return tieba_reply_and_submit(page,payload,account['identity'],target)
                 return tieba_fill_and_submit(page,payload,account['identity'],target)

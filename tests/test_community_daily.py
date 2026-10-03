@@ -62,6 +62,11 @@ def test_pause_keeps_history_and_does_not_resend_on_enable(ctx):
     s.daily.control(p,'enable');s.daily.prepare(p,force=True);s.tick();assert not f.sent
 
 
+def test_stop_all_stops_future_daily_runs_too(ctx):
+    p=setup_plan(ctx);s,f,_,n=ctx;s.stop_all();n[0]+=86400;s.tick()
+    assert s.daily.get(p)['state']=='paused' and not s.state()['posts'] and not f.sent
+
+
 def test_platform_failure_stops_the_daily_plan(ctx):
     p=setup_plan(ctx);s,f,_,_=ctx;f.fail=TimeoutError();s.tick();s.tick()
     assert len(f.sent)==1 and s.daily.get(p)['state']=='paused'

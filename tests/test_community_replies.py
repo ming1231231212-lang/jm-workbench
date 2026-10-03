@@ -84,6 +84,39 @@ def test_other_platform_reply_is_rejected(ctx):
     with pytest.raises(ValueError,match='仅百度贴吧'):s.launch(pid)
 
 
+def test_preflight_failure_can_resume_same_reservation_without_consuming_budget(ctx):
+    from jm_workbench.community.adapters import PreflightStopped
+    s,f,a,n=ctx;pid=reply(s,a);s.launch(pid);f.fail=PreflightStopped('页面未加载就绪，未提交');s.tick()
+    job=s.state()['posts'][0]['jobs'][0]
+    assert job['started']==0 and job['receipt']['phase']=='preflight' and not s.state()['risk']
+    f.fail=None;s.retry_preflight(job['id']);s.tick()
+    assert len(s.state()['posts'])==1 and s.state()['posts'][0]['jobs'][0]['state']=='submitted'
+
+
+def test_platform_rejection_is_not_retryable_preflight(ctx):
+    from jm_workbench.community.adapters import NotSubmitted
+    s,f,a,n=ctx;pid=reply(s,a);s.launch(pid);f.fail=NotSubmitted('平台拒绝提交');s.tick()
+    job=s.state()['posts'][0]['jobs'][0]
+    with pytest.raises(ValueError,match='预检'):s.retry_preflight(job['id'])
+    assert s.state()['risk']
+
+
+def test_login_readiness_waits_only_for_actual_identity(monkeypatch):
+    import jm_workbench.community.adapters as adapters
+    states=iter([adapters.NotSubmitted('loading'),'expected'])
+    class Page:
+        waits=[]
+        def wait_for_timeout(self,n):self.waits.append(n)
+    def identity(page):
+        value=next(states)
+        if isinstance(value,Exception):raise value
+        return value
+    monkeypatch.setattr(adapters,'tieba_identity',identity);p=Page()
+    assert adapters.tieba_wait_identity(p,'expected')=='expected' and p.waits==[200]
+    monkeypatch.setattr(adapters,'tieba_identity',lambda p:'different')
+    with pytest.raises(adapters.PreflightStopped):adapters.tieba_wait_identity(p,'expected')
+
+
 @pytest.mark.parametrize('url',['http://tieba.baidu.com/p/123456','https://tieba.baidu.com.evil/p/123456','https://tieba.baidu.com/f?kw=x','https://x@tieba.baidu.com/p/123456'])
 def test_invalid_reply_target(url):
     with pytest.raises(ValueError):tieba_thread_url(url)

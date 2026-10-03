@@ -56,6 +56,9 @@ def router(service):
     @api.post('/jobs/{ident}/open')
     def open_job(ident:str):return service.open_job(ident)
 
+    @api.post('/jobs/{ident}/retry-preflight')
+    def retry_preflight(ident:str):return service.retry_preflight(ident)
+
     @api.post('/jobs/{ident}/record')
     def record(ident:str,payload:LinkRecord):return service.record_url(ident,payload.url)
 

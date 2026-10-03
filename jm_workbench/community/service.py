@@ -9,7 +9,7 @@ from contextlib import nullcontext
 from pathlib import Path
 from ..core.db import dumps, uid
 from ..core.config import revision
-from .adapters import CommunityAdapter, NotSubmitted
+from .adapters import CommunityAdapter, NotSubmitted, PreflightStopped
 from .registry import PLATFORMS, platform, destination, compose_url, safe_post_url, tieba_thread_url
 from .secrets import seal, unseal
 
@@ -231,8 +231,27 @@ class Community:
 
     def stop_all(self):
         with self.store.connect(True) as db:
+            db.execute("UPDATE community_plans SET state='paused',message='用户停止全部任务',updated=? WHERE state='enabled'",(self.clock(),))
             db.execute("UPDATE community_jobs SET state='paused',message='用户停止全部任务',updated=? WHERE state='queued'",(self.clock(),))
             db.execute("UPDATE community_jobs SET message='stop_requested' WHERE state='running'")
+
+    def retry_preflight(self,ident):
+        with self.step_lock:
+            rows=self.store.rows('SELECT * FROM community_jobs WHERE id=?',(ident,))
+            if not rows:raise ValueError('任务不存在')
+            job=rows[0];receipt=json.loads(job['receipt']);snap=json.loads(job['snapshot'])
+            if job['state']!='failed' or receipt.get('phase')!='preflight' or receipt.get('submitted') is not False:
+                raise ValueError('只有明确未进入提交的本地预检失败可重新检查；平台拒绝和结果不明不能重发')
+            self.check_account(job['account_id']);a=self.account(job['account_id'])
+            with self.store.connect(True) as db:
+                current=db.execute('SELECT state,receipt FROM community_jobs WHERE id=?',(ident,)).fetchone()
+                if current['state']!='failed' or current['receipt']!=job['receipt']:raise ValueError('任务已变化，请刷新')
+                if db.execute('SELECT 1 FROM community_risk WHERE platform=?',(job['platform'],)).fetchone():raise ValueError('平台仍有暂停记录，不能重试')
+                if a['identity']!=snap['account']['identity'] or a['version']!=snap['account']['version'] or snap['revision']!=self.cfg.code_revision:
+                    raise ValueError('原账号或代码快照已失效，不能重试')
+                history=receipt.get('preflight_history',[])+[{'message':job['message'],'at':job['updated']}]
+                db.execute("UPDATE community_jobs SET state='queued',started=0,due=?,message='本地预检已复核，继续原任务',receipt=?,updated=? WHERE id=?",(self.clock(),dumps({'preflight_history':history}),self.clock(),ident))
+            return {'message':'已继续原任务；没有新建重复内容'}
 
     def resolve(self,ident,outcome,note,url=''):
         if len(note.strip())<12 or outcome not in ('submitted','not_sent'):raise ValueError('请填写完整的核实结果')
@@ -322,7 +341,7 @@ class Community:
                 identity=self.adapter.check(a,a['_secret'])
                 if identity!=s['account']['identity']:raise NotSubmitted('登录身份已变化，未提交')
             except Exception:
-                raise NotSubmitted('账号预检失败或身份变化，未提交；请检查登录和授权') from None
+                raise PreflightStopped('账号预检失败或身份变化，未提交；请检查登录和授权') from None
             if self.shutdown.is_set():raise NotSubmitted('服务正在停止，尚未提交')
             current=self.store.rows('SELECT message FROM community_jobs WHERE id=?',(job['id'],))[0]
             if current['message'] in ('stop_requested','cancel_requested'):raise InterruptedError(current['message'])
@@ -332,13 +351,20 @@ class Community:
             status,message='submitted','平台已接收 · 公开可见性未核验'
         except InterruptedError as ex:
             status,message=('cancelled' if str(ex)=='cancel_requested' else 'paused'),'用户已停止，未提交'
+        except PreflightStopped as ex:
+            status,message='failed',str(ex)
+            receipt={'phase':'preflight','submitted':False}
         except NotSubmitted as ex:
             status,message='failed',str(ex)
         except Exception:
             status,message='unknown','提交结果不明，已暂停此平台；请到网站核实，禁止自动重发'
         with self.store.connect(True) as db:
             db.execute('UPDATE community_jobs SET state=?,receipt=?,message=?,updated=? WHERE id=?',(status,dumps(receipt),message,self.clock(),job['id']))
-            if status in ('unknown','failed'):self.lock_platform(p,message,db)
+            if status=='failed' and receipt.get('phase')=='preflight':
+                db.execute('UPDATE community_jobs SET started=0 WHERE id=?',(job['id'],))
+                db.execute("UPDATE community_jobs SET state='paused',message=? WHERE platform=? AND state='queued'",(message,p))
+                if p=='tieba':db.execute("UPDATE community_plans SET state='paused',message=?,updated=? WHERE state='enabled'",(message,self.clock()))
+            elif status in ('unknown','failed'):self.lock_platform(p,message,db)
 
     def start(self):
         self.recover()
