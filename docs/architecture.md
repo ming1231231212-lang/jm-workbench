@@ -131,3 +131,6 @@ sequenceDiagram
 检查器不连接业务数据库、不调用业务写接口。排队恢复由现有Engine/recover负责：waiting/queued保留，running暂停，reserved变unknown并锁平台；守护不自动解除这些状态。维护停用标记独立于业务“停止任务”，业务停止不会被守护反转。日志滚动且不记录Cookie或账号信息，配置和运行状态仅在var。
 
 Windows任务设置语义参考Microsoft官方文档：[任务设置](https://learn.microsoft.com/en-us/powershell/module/scheduledtasks/new-scheduledtasksettingsset)与[受限交互式主体](https://learn.microsoft.com/en-us/powershell/module/scheduledtasks/new-scheduledtaskprincipal)。
+
+## 社区发帖域（2026-10-03）
+新增独立community域，账号/草稿/队列/适配器不复用视频postVideo接口。与SAU共享本机API安全入口，保留原评论执行源码。能力分为API、账号浏览器、网页交接及本人网页发布；具体结构、数据与幂等边界见 community-publishing.md。

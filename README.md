@@ -108,3 +108,6 @@ GitHub Actions在Python 3.11、Node 22上运行离线测试。推送代码不会
 可用`python -m scripts.import_legacy --runtime <原爬虫目录> --profile <专用Chrome资料目录>`只读导入旧记录。迁入的候选只作为历史数据，不能直接触发评论；旧接触记录继续参与去重。`scripts/install_legacy_bridge.py`备份并将旧成人任务入口及F6入口改为观察JM队列，避免两套程序同时发布。
 
 卸载或回退前先停止JM任务。旧入口备份在`outputs/legacy-backup-*`；回退也必须保留JM新增接触历史，避免重复联系。
+
+## 社区发布
+工作台新增社区发布入口（/#community），百度贴吧优先。20个平台的真实支持方式、账号配置和使用步骤见 [社区发布说明](docs/community-publishing.md)。自动发布目前为贴吧文字帖以及DEV、X、Reddit、Hugging Face Hub API；其余为网页发布交接，不能表述成20平台自动群发。

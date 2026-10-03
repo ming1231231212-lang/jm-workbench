@@ -1,5 +1,6 @@
 import * as views from "./views.js";
 import { escape as e } from "./ui.js";
+import { CommunityUI, communityPage } from "./community.js";
 import {
   PublishingUI,
   publishingPage,
@@ -31,6 +32,7 @@ const publishing = new PublishingUI({
   showForm,
   dialog,
 });
+const community = new CommunityUI({request, toast, render, showForm, dialog});
 function toast(text, error = false) {
   const box = document.querySelector("#toast");
   box.textContent = text;
@@ -80,7 +82,9 @@ async function render() {
     "v" + state.version + " · " + state.revision.slice(0, 8);
   document.querySelector('[data-action="launch"]').hidden =
     activePage !== "tasks";
-  if (page === "publishing") {
+  if (page === "community") {
+    content.innerHTML = communityPage(await community.load(), community.tab, community.region, community.query);
+  } else if (page === "publishing") {
     const data = await publishing.load();
     content.innerHTML = publishingPage(data, publishing.tab, publishing.filter);
   } else if (page === "accounts") {
@@ -126,6 +130,7 @@ async function action(name, id) {
   if (name === "close-dialog") return dialog.close();
   if (name === "refresh") return refresh(true);
   if (name.startsWith("pub-")) return publishing.handle(name, id);
+  if (name.startsWith("com-")) return community.handle(name, id);
   if (name === "preview-comment") {
     const form = document.querySelector("#task-form");
     if (!form.reportValidity()) return;
@@ -286,6 +291,9 @@ document.addEventListener("input", (event) => {
       .querySelector("#comment-preview-result")
       .replaceChildren();
 });
+document.addEventListener('change', event => {
+  if(event.target.form?.id==='com-account-form' && event.target.name==='platform') community.syncAccount(event.target.form);
+});
 document.addEventListener("submit", async (event) => {
   const form = event.target;
   event.preventDefault();
@@ -304,6 +312,10 @@ document.addEventListener("submit", async (event) => {
   const data = Object.fromEntries(new FormData(form)),
     id = form.dataset.id;
   try {
+    if (form.id.startsWith('com-')) {
+      await community.submit(form, event.submitter);
+      return;
+    }
     if (
       form.id === "pub-form" ||
       form.id === "pub-settings-form" ||
@@ -352,7 +364,7 @@ setInterval(() => {
     !["INPUT", "TEXTAREA", "SELECT"].includes(
       document.activeElement?.tagName,
     ) &&
-    ["tasks", "publishing", "overview", "runs", "platforms"].includes(page)
+    ["tasks", "publishing", "community", "overview", "runs", "platforms"].includes(page)
   )
     refresh().catch(() => {});
 }, 10000);

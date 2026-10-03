@@ -52,7 +52,7 @@ def main():
         page.on('pageerror',lambda error:errors.append(str(error)))
         def nav(route):
             page.goto(f'http://127.0.0.1:{port}/#{route}')
-            expect(page.locator('#nav a')).to_have_count(5)
+            expect(page.locator('#nav a')).to_have_count(6)
             expect(page.locator('#content')).not_to_contain_text('正在连接')
         def refresh():
             page.locator('[data-action="refresh"]').click()

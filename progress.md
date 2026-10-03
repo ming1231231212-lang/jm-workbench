@@ -95,3 +95,8 @@
 2026-09-30 交付：功能提交 2ef41e4 已上传原私有仓库，GitHub CI 36694395425 成功。正式 8776 已加载新版，SAU 防重复提交握手通过、3 个账号可读，发布新队列为 0；没有借验收给真实账号发视频或评论。原 objects/evidence/attempts/continuations/risk/reads/history 逐表一致；4 个运行仅 1 个 waiting 快照 revision 更新，pending 1 条、旧 112 条事件保留。watchdog 已重新绑定并报告 healthy。正式页面额外 9 项只读检查通过；已有标签页先只变更 hash 会保留旧脚本，已完整刷新后核验五入口。备份、截图和验收报告在 outputs/deployment-sau-20260930；临时测试标签关闭，用户原标签及最终预览保留。
 
 末轮复核修正：本地素材的 SAU 缓存引用按服务地址和安装目录隔离，切换服务必须重新传入素材；预检期间服务配置变化拒绝排队。68 项发布/SAU/迁移针对性测试通过（新增 1 项跨服务缓存隔离测试）。这项修正单独提交，原评论与爬虫执行代码保持不变。
+
+## 2026-10-03 社区发布
+已只读检查生产健康和代码，在outputs/community-integration独立worktree、codex/community-publishing分支开发。
+
+社区模块新增36项Python测试通过；完整Python回归281通过；Node34通过；社区Chrome18项、原发布Chrome28项通过。真实平台发送0。生产只读状态为3个completed、1个paused、10条sent，视频发布队列为空。

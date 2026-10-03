@@ -2,6 +2,6 @@
   "private": true,
   "type": "module",
   "scripts": {
-    "test": "node --test tests/ui.test.js tests/extract.test.js tests/publishing.test.js"
+    "test": "node --test tests/ui.test.js tests/extract.test.js tests/publishing.test.js tests/community.test.js"
   }
 }

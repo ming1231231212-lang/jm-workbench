@@ -16,6 +16,7 @@ import { commentFields } from "./comment-fields.js";
 export const pages = [
   ["tasks", "☷", "任务"],
   ["publishing", "↗", "内容发布"],
+  ["community", "▤", "社区发布"],
   ["data", "▤", "数据"],
   ["accounts", "◎", "账号"],
   ["settings", "⚙", "设置"],
