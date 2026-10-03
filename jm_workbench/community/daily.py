@@ -96,10 +96,15 @@ class DailyPlans:
     def tick(self):
         from .service import SHANGHAI
         today=datetime.fromtimestamp(self.s.clock(),SHANGHAI).date().isoformat()
-        # Do not catch up yesterday's work after shutdown or quota delays.
+        # An evening test may legitimately finish after midnight. Expire its
+        # unsent queue at the next daily start, not in the middle of its spacing.
         with self.store.connect(True) as db:
-            db.execute("""UPDATE community_jobs SET state='cancelled',message='已过计划日期，不追补发送' WHERE state='queued'
-              AND post_id IN (SELECT post_id FROM community_plan_items WHERE day<?)""",(today,))
+            for row in db.execute("SELECT DISTINCT i.plan_id,i.day,p.payload FROM community_plan_items i JOIN community_plans p ON p.id=i.plan_id WHERE i.day<?",(today,)).fetchall():
+                payload=json.loads(row['payload'])
+                deadline=datetime.fromisoformat(row['day']).replace(tzinfo=SHANGHAI)+timedelta(days=1,hours=payload['hour'],minutes=payload['minute'])
+                if self.s.clock()>=deadline.timestamp():
+                    db.execute("""UPDATE community_jobs SET state='cancelled',message='已到下一日计划时间，不积压补发' WHERE state='queued'
+                      AND post_id IN (SELECT post_id FROM community_plan_items WHERE plan_id=? AND day=?)""",(row['plan_id'],row['day']))
         for p in self.store.rows("SELECT id FROM community_plans WHERE state='enabled'"):
             self.prepare(p['id'])
 

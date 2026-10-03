@@ -41,6 +41,14 @@ def test_next_day_uses_new_material_and_never_catches_up(ctx):
     bodies=[p['payload']['body'] for p in state['posts']];assert len(set(bodies))==12
 
 
+def test_evening_test_is_not_cancelled_halfway_at_midnight(ctx):
+    p=setup_plan(ctx);s,_,_,n=ctx
+    n[0]=datetime(2026,10,3,22,0,tzinfo=SHANGHAI).timestamp();s.daily.prepare(p,force=True)
+    n[0]=datetime(2026,10,4,0,1,tzinfo=SHANGHAI).timestamp();s.daily.tick()
+    assert all(j['state']=='queued' for r in s.state()['posts'] for j in r['jobs'])
+    assert len(s.state()['posts'])==6
+
+
 def test_waits_until_shanghai_time_and_shortages_are_visible(ctx):
     p=setup_plan(ctx,topics=0,replies=1);s,_,_,n=ctx;n[0]-=60;s.daily.tick()
     assert not s.state()['posts']
