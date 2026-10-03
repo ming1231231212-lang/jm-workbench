@@ -52,3 +52,20 @@ test('sync network failure preserves the account list and is not retried immedia
  const ui=new CommunityUI({request:async(path)=>{if(path.endsWith('/state'))return {accounts:[{id:'one',platform:'tieba',enabled:true}]};checks++;throw Error('connection failed');}});
  assert.equal((await ui.load()).accounts.length,1);await ui.load();assert.equal(checks,1);
 });
+
+test('same-name accounts have separate delete targets',()=>{
+ const accounts=['one','two'].map(id=>({id,platform:'tieba',name:'同名账号',enabled:true}));
+ const html=communityPage({platforms:[platform],accounts,posts:[],risk:[]},'accounts');
+ assert.match(html,/data-action="com-delete-account" data-id="one"/);
+ assert.match(html,/data-action="com-delete-account" data-id="two"/);
+});
+
+test('delete opens an escaped, versioned confirmation without sending a request',async()=>{
+ let dialog='';const calls=[];
+ const ui=new CommunityUI({request:async path=>calls.push(path),showForm:html=>dialog=html});
+ ui.data={platforms:[platform],accounts:[{id:'two',version:4,platform:'tieba',name:'<script>bad</script>',identity_hint:'重复账号',identity:''}]};
+ await ui.handle('com-delete-account','two');
+ assert.equal(calls.length,0);assert.match(dialog,/com-delete-account-form/);assert.match(dialog,/data-version="4"/);
+ assert.match(dialog,/重复账号/);assert.match(dialog,/尚未核验登录/);assert.ok(!dialog.includes('<script>'));
+ assert.match(dialog,/close-dialog/);assert.match(dialog,/确认删除/);
+});

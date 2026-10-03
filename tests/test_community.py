@@ -281,3 +281,82 @@ def test_tieba_title_limits_and_snapshot_destination(setup):
     s.launch(pid)
     j=s.state()['posts'][0]['jobs'][0]
     assert s.job(j['id'])['snapshot']['destination']=='人工智能'
+
+
+def test_delete_only_selected_unused_account_preserves_profile_and_other_account(setup):
+    c,s,b,_=setup
+    kept=account(s,'tieba',name='同名账号')
+    removed=s.save_account(CommunityAccount(platform='tieba',name='同名账号'))
+    before=s.account(kept)
+    profile=s.cfg.config.home/'community-profiles'/removed['id']
+    profile.mkdir(parents=True);(profile/'login-marker').write_text('preserve')
+    with s.store.connect(True) as db:db.execute("INSERT INTO community_risk VALUES('tieba','保留平台暂停',1)")
+    path='/api/community/accounts/'+removed['id']+'?version='+str(removed['version'])
+    result=c.delete(path)
+    assert result.status_code==200 and result.json()['deleted']
+    assert [a['id'] for a in s.state()['accounts']]==[kept]
+    assert s.account(kept)==before and (profile/'login-marker').read_text()=='preserve'
+    assert s.state()['risk'][0]['reason']=='保留平台暂停' and not b.sent
+    assert c.delete(path).status_code==200 # A repeat after a lost response is harmless.
+
+
+@pytest.mark.parametrize('state',['queued','running','paused','unknown','manual','submitted','failed','not_sent','cancelled','recorded'])
+def test_delete_rejects_any_job_reference_and_keeps_history(setup,state):
+    c,s,_,_=setup
+    aid=account(s)
+    with s.store.connect(True) as db:
+        db.execute('INSERT INTO community_jobs(id,account_id,state) VALUES(?,?,?)',('referenced-job',aid,state))
+    before=s.store.rows('SELECT * FROM community_jobs')
+    result=c.delete('/api/community/accounts/'+aid+'?version=1')
+    assert result.status_code==400 and '停用' in result.json()['error']
+    assert s.account(aid) and s.store.rows('SELECT * FROM community_jobs')==before
+
+
+def test_delete_rejects_post_reference_until_draft_target_is_changed(setup):
+    _,s,_,_=setup
+    aid=account(s);other=account(s,name='保留账号');pid=post(s,aid)
+    with pytest.raises(ValueError,match='帖子|草稿'):s.delete_account(aid,1)
+    draft=s.state()['posts'][0]['payload'];draft['targets']=[{'account_id':other,'destination':''}]
+    s.save(CommunityPost(**draft),pid)
+    s.delete_account(aid,1)
+    assert s.state()['posts'][0]['payload']['targets'][0]['account_id']==other
+
+
+def test_delete_requires_token_version_and_rejects_stale_confirmation(setup):
+    c,s,_,_=setup
+    aid=account(s);path='/api/community/accounts/'+aid
+    assert c.delete(path).status_code==422
+    token=c.headers.pop('X-JM-Token')
+    assert c.delete(path+'?version=1').status_code==403
+    c.headers['X-JM-Token']=token
+    s.save_account(CommunityAccount(platform='dev',name='用户已修改'),aid)
+    assert c.delete(path+'?version=1').status_code==400
+    assert s.account(aid)['name']=='用户已修改'
+
+
+def test_pending_edit_and_login_check_cannot_recreate_deleted_account(setup):
+    _,s,b,_=setup
+    aid=account(s)
+    def delete_during_check(*args):
+        s.delete_account(aid,1)
+        return b.identity
+    b.check=delete_during_check
+    with pytest.raises(ValueError,match='改变'):s.check_account(aid)
+    with pytest.raises(ValueError,match='不存在'):s.save_account(CommunityAccount(platform='dev',name='旧编辑'),aid)
+    assert not s.state()['accounts']
+
+
+def test_account_delete_racing_draft_save_never_leaves_dangling_target(setup):
+    import threading
+    _,s,_,_=setup
+    aid=account(s);barrier=threading.Barrier(2)
+    def run(action):
+        barrier.wait()
+        try:return action()
+        except ValueError:return None
+    with ThreadPoolExecutor(max_workers=2) as pool:
+        first=pool.submit(run,lambda:s.delete_account(aid,1))
+        second=pool.submit(run,lambda:post(s,aid))
+        first.result();second.result()
+    accounts=s.state()['accounts'];posts=s.state()['posts']
+    assert (len(accounts),len(posts)) in [(0,0),(1,1)]

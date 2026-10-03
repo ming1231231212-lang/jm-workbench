@@ -1,4 +1,4 @@
-from fastapi import APIRouter
+from fastapi import APIRouter, Query
 from .models import CommunityAccount, CommunityPost, LinkRecord, ResolveRecord, ClearRecord
 
 
@@ -15,6 +15,10 @@ def router(service):
     def edit_account(ident:str,payload:CommunityAccount):
         service.account(ident)
         return service.save_account(payload,ident)
+
+    @api.delete('/accounts/{ident}')
+    def delete_account(ident:str,version:int=Query(...,ge=1)):
+        return service.delete_account(ident,version)
 
     @api.post('/accounts/{ident}/check')
     def check(ident:str):return service.check_account(ident)

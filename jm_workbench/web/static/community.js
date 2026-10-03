@@ -27,7 +27,7 @@ export function communityPage(data,tab='posts',region='',query=''){
     body=data.posts.length?`<div class="community-posts">${data.posts.map(post=>`<article class="panel community-post"><div class="section-heading"><div><h2>${e(post.payload.title)}</h2><p class="muted">${time(post.created)} · ${post.payload.targets.length} 个发布目标${post.payload.schedule_at?' · 定时 '+time(post.payload.schedule_at):''}</p></div><div class="actions">${button('查看内容','com-view',post.id,'small')}${post.state==='draft'?button('编辑','com-edit',post.id,'small')+button('开始发布','com-launch',post.id,'primary small'):''}${post.jobs.some(j=>j.state==='queued'||j.state==='running')?button('暂停','com-pause',post.id,'small'):''}${post.jobs.some(j=>j.state==='paused')?button('继续','com-resume',post.id,'small'):''}${post.state==='draft'||post.jobs.some(j=>['queued','paused','manual'].includes(j.state))?button('取消','com-cancel',post.id,'small'):''}</div></div>${post.jobs.length?`<div class="table-wrap"><table class="community-jobs"><thead><tr><th>平台 / 账号</th><th>板块</th><th>状态</th><th>结果与操作</th></tr></thead><tbody>${post.jobs.map(j=>`<tr><td><b>${e(names[j.platform])}</b><div class="muted">${e(j.account_name)}</div></td><td>${e(j.destination||'个人主页')}</td><td>${badge(j.state)}${j.state==='queued'?`<div class="muted">${time(j.due)}</div>`:''}</td><td><div class="muted">${e(j.message)}</div><div class="actions">${button(j.receipt.url?'打开帖子':'打开网页','com-open-job',j.id,'small')}${j.state==='manual'?button('登记链接','com-record',j.id,'small'):''}${j.state==='unknown'?button('核实结果','com-resolve',j.id,'small'):''}</div></td></tr>`).join('')}</tbody></table></div>`:`<p>${badge(post.state)} · 保存草稿不会发布到任何平台</p>`}</article>`).join('')}</div>`:empty('从第一篇帖子开始','先添加贴吧账号，再选择吧名、填写标题和正文。',button('添加社区账号','com-new-account','','primary'));
   } else if(tab==='accounts'){
     body=`<div class="section-heading"><h2>社区账号 <span class="count-label">${data.accounts.length}</span></h2>${button('添加账号','com-new-account','','primary')}</div><p class="muted">贴吧在专属Chrome登录后，返回工作台自动同步；也可点“检查连接”。API密钥只在本机加密保存。</p>`;
-    body+=data.accounts.length?`<div class="table-wrap"><table><thead><tr><th>账号</th><th>平台</th><th>连接方式</th><th>状态</th><th>操作</th></tr></thead><tbody>${data.accounts.map(a=>{const p=data.platforms.find(p=>p.id===a.platform);return `<tr><td><b>${e(a.name)}</b><div class="muted">${e(a.identity_hint)}</div></td><td>${e(p.name)}</td><td>${e(p.mode_label)}</td><td>${accountStatus(a,p)}${a.identity?`<div class="muted">账号 ID：${e(a.identity)}</div>`:''}</td><td><div class="actions">${button('登录 / 打开','com-open-account',a.id,'small')}${p.automatic?button('检查连接','com-check',a.id,'small'):''}${button('编辑','com-edit-account',a.id,'small')}</div></td></tr>`;}).join('')}</tbody></table></div>`:empty('尚未添加社区账号','点击添加账号，默认优先百度贴吧。');
+    body+=data.accounts.length?`<div class="table-wrap"><table><thead><tr><th>账号</th><th>平台</th><th>连接方式</th><th>状态</th><th>操作</th></tr></thead><tbody>${data.accounts.map(a=>{const p=data.platforms.find(p=>p.id===a.platform);return `<tr><td><b>${e(a.name)}</b><div class="muted">${e(a.identity_hint)}</div></td><td>${e(p.name)}</td><td>${e(p.mode_label)}</td><td>${accountStatus(a,p)}${a.identity?`<div class="muted">账号 ID：${e(a.identity)}</div>`:''}</td><td><div class="actions">${button('登录 / 打开','com-open-account',a.id,'small')}${p.automatic?button('检查连接','com-check',a.id,'small'):''}${button('编辑','com-edit-account',a.id,'small')}${button('删除','com-delete-account',a.id,'small danger')}</div></td></tr>`;}).join('')}</tbody></table></div>`:empty('尚未添加社区账号','点击添加账号，默认优先百度贴吧。');
   } else {
     const filtered=data.platforms.filter(p=>(!region||p.region===region)&&(!query||`${p.name} ${p.categories}`.toLowerCase().includes(query.toLowerCase())));
     body=`<form id="com-filter" class="community-filter">${select('地区','region',[['','全部'],['国内','国内'],['国外','国外']],region)}${field('搜索平台 / 类型','query',query,'search','placeholder="贴吧、AI、互联网、编程…"')}<button class="button">筛选</button></form><p class="muted">20个平台统一管理。自动发布方式与网页登录方式分别标明；Hacker News只支持本人在网页撰写与提交。</p><div class="table-wrap"><table><thead><tr><th>平台</th><th>内容方向</th><th>支持形式</th><th>当前发布方式</th><th>操作</th></tr></thead><tbody>${filtered.map(p=>`<tr><td><b>${e(p.name)}</b><div class="muted">${e(p.region)}</div></td><td>${e(p.categories)}</td><td>${e(p.format)}</td><td>${e(p.mode_label)}<div class="muted">${e(p.note)}</div></td><td>${button('添加账号','com-add-platform',p.id,'small')}</td></tr>`).join('')}</tbody></table></div>`;
@@ -77,11 +77,18 @@ export class CommunityUI {
     this.syncAccount(f);
   }
   syncAccount(f){const p=this.data.platforms.find(p=>p.id===f.elements.platform.value);f.querySelector('.com-api-secret').hidden=p.mode!=='api';f.querySelector('.com-browser-help').hidden=p.mode==='api';}
+  deleteAccountForm(id){
+    const a=this.data.accounts.find(a=>a.id===id);
+    if(!a)throw Error('账号已不存在，请刷新列表');
+    const p=this.data.platforms.find(p=>p.id===a.platform);
+    this.showForm(`<form id="com-delete-account-form" data-id="${e(a.id)}" data-version="${e(a.version)}"><div class="dialog-header"><h2 id="dialog-title">删除社区账号</h2>${button('×','close-dialog','','icon-button')}</div><p>确认删除 <b>${e(a.name)}</b>？</p><p class="muted">${e(p.name)} · ${e(a.identity_hint||'无备注')}<br>${a.identity?'已核验账号 ID：'+e(a.identity):'尚未核验登录'}</p><p>仅移除工作台账号配置，平台账号和浏览器登录资料保留。有帖子或任务引用时会提示处理方式。</p><div class="dialog-footer"><button type="button" class="button" data-action="close-dialog">取消</button><button class="button danger">确认删除</button></div></form>`);
+  }
   async handle(action,id){
     if(action==='com-tab'){this.tab=id;return this.render();}
     if(action==='com-new'){await this.load();return this.compose();}
     if(action==='com-new-account'||action==='com-add-platform'){await this.load();return this.accountForm(null,id||'tieba');}
     if(action==='com-edit-account')return this.accountForm(this.data.accounts.find(a=>a.id===id));
+    if(action==='com-delete-account')return this.deleteAccountForm(id);
     if(action==='com-edit')return this.compose(this.data.posts.find(p=>p.id===id));
     if(action==='com-view'){
       const post=this.data.posts.find(p=>p.id===id);
@@ -107,6 +114,9 @@ export class CommunityUI {
     if(form.id==='com-account-form'){
       const body=Object.fromEntries(fd);body.platform=form.elements.platform.value;body.enabled=body.enabled==='true';
       result=await this.request('/api/community/accounts'+(id?'/'+id:''),body,id?'PUT':'POST');this.tab='accounts';
+    } else if(form.id==='com-delete-account-form'){
+      result=await this.request(`/api/community/accounts/${id}?version=${encodeURIComponent(form.dataset.version)}`,{},'DELETE');
+      this.syncChecks.delete(id);this.tab='accounts';
     } else if(form.id==='com-post-form'){
       result=await this.request('/api/community/posts'+(id?'/'+id:''),communityPayload(fd),id?'PUT':'POST');
       // Persist returned ID before launch; launch failure must not create a second draft.

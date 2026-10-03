@@ -44,11 +44,13 @@ class Community:
         return value
 
     def save_account(self,payload,ident=None):
+        editing=ident is not None
         ident=ident or uid();data=payload.model_dump(exclude={'secret'})
         secret=payload.secret.get_secret_value()
         encrypted=seal(secret) if secret else ''
         with self.store.connect(True) as db:
             old=db.execute('SELECT * FROM community_accounts WHERE id=?',(ident,)).fetchone()
+            if editing and not old:raise ValueError('社区账号不存在，请刷新列表')
             if db.execute("SELECT 1 FROM community_jobs WHERE account_id=? AND state IN ('queued','running','paused','unknown','manual')",(ident,)).fetchone():
                 raise ValueError('该账号仍有活动或不确定的发帖任务，请先处理任务')
             if old and json.loads(old['data'])['platform']!=data['platform']:
@@ -58,6 +60,22 @@ class Community:
             else:
                 db.execute('INSERT INTO community_accounts(id,data,credential) VALUES(?,?,?)',(ident,dumps(data),encrypted))
         return self.account(ident)
+
+    def delete_account(self,ident,version):
+        # Serialize with draft saves and launch, so no dangling targets can appear.
+        with self.store.connect(True) as db:
+            a=db.execute('SELECT version FROM community_accounts WHERE id=?',(ident,)).fetchone()
+            if not a:return {'id':ident,'deleted':True,'message':'社区账号已删除'}
+            if a['version']!=version:raise ValueError('账号配置已改变，请刷新后重新确认删除')
+            if db.execute('SELECT 1 FROM community_jobs WHERE account_id=?',(ident,)).fetchone():
+                raise ValueError('该账号已有发帖任务或历史记录，请使用“编辑 → 停用”保留记录')
+            for row in db.execute('SELECT state,payload FROM community_posts'):
+                if any(t['account_id']==ident for t in json.loads(row['payload'])['targets']):
+                    if row['state']=='draft':raise ValueError('该账号被草稿引用，请先编辑草稿移除该账号，再删除')
+                    raise ValueError('该账号已有帖子记录，请使用“编辑 → 停用”保留记录')
+            db.execute('DELETE FROM community_accounts WHERE id=?',(ident,))
+        # This only removes local configuration, never the browser profile or platform account.
+        return {'id':ident,'deleted':True,'message':'社区账号已删除，浏览器登录资料保留'}
 
     def check_account(self,ident):
         a=self.account(ident,True)
@@ -91,8 +109,10 @@ class Community:
     def save(self,payload,ident=None):
         data=payload.model_dump();now=self.clock()
         if data['schedule_at'] and data['schedule_at']<=now:raise ValueError('请选择未来的发布时间')
-        for target in data['targets']:self.account(target['account_id'])
         with self.store.connect(True) as db:
+            for target in data['targets']:
+                if not db.execute('SELECT 1 FROM community_accounts WHERE id=?',(target['account_id'],)).fetchone():
+                    raise ValueError('社区账号不存在，请刷新后重新选择发布账号')
             if ident:
                 old=db.execute('SELECT * FROM community_posts WHERE id=?',(ident,)).fetchone()
                 if not old or old['state']!='draft':raise ValueError('仅未启动的草稿可以编辑')
