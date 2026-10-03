@@ -23,3 +23,5 @@
 - API：POST/PUT /api/community/plans[/id]；POST /api/community/plans/{id}/enable|pause|today。
 
 tests/test_community_daily.py、tests/test_community_replies.py、scripts/verify_community_daily_ui.py和scripts/verify_tieba_replies.py均使用隔离库或网络拦截夹具。真实发送仅在用户明确授权的测试中使用实际账号。
+
+本地登录/内容核对在点击前失败时单独标记preflight，不占用实际发送预算；重新检查入口只允许这些明确未进入提交的记录，拒绝平台拒绝与unknown。全局停止同时关闭未来的每日计划。
