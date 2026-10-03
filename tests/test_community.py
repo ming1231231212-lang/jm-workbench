@@ -45,6 +45,54 @@ def account(s, platform='dev', name='测试账号'):
     return a['id']
 
 
+def test_tieba_sync_records_identity_without_jobs_or_risk_reset(setup):
+    c,s,b,_=setup
+    a=s.save_account(CommunityAccount(platform='tieba',name='待登录'))
+    with s.store.connect(True) as db:
+        db.execute("INSERT INTO community_risk VALUES('tieba','已有平台限制',1)")
+    r=c.post('/api/community/accounts/'+a['id']+'/sync',json={})
+    assert r.status_code==200 and r.json()['status']=='verified'
+    assert s.account(a['id'])['identity']==b.identity
+    assert s.account(a['id'])['checked']>0
+    assert not b.sent and not s.state()['posts']
+    assert s.state()['risk'][0]['reason']=='已有平台限制'
+
+
+def test_tieba_sync_waits_for_login_and_rejects_changed_identity(setup):
+    _,s,b,_=setup
+    a=s.save_account(CommunityAccount(platform='tieba',name='待登录'))
+    def pending(*args):raise NotSubmitted('等待贴吧登录')
+    original=b.check;b.check=pending
+    assert s.sync_account(a['id'])['status']=='pending'
+    assert not s.account(a['id'])['identity']
+    b.check=original;s.sync_account(a['id'])
+    b.identity='another-user'
+    result=s.sync_account(a['id'])
+    assert result['status']=='pending' and '身份已变化' in result['message']
+    assert s.account(a['id'])['identity']=='test-user' and not b.sent
+
+
+def test_sync_only_enabled_tieba_accounts(setup):
+    _,s,b,_=setup
+    def unexpected(*args):raise AssertionError('adapter must not be called')
+    b.check=unexpected
+    for platform,enabled in [('tieba',False),('dev',True)]:
+        a=s.save_account(CommunityAccount(platform=platform,name='账号',enabled=enabled))
+        with pytest.raises(ValueError):s.sync_account(a['id'])
+
+
+def test_concurrent_identity_binding_cannot_be_overwritten(setup):
+    _,s,b,_=setup
+    a=s.save_account(CommunityAccount(platform='tieba',name='并发核验'))
+    def raced(*args):
+        with s.store.connect(True) as db:
+            db.execute('UPDATE community_accounts SET identity=? WHERE id=?',('other-user',a['id']))
+        return 'test-user'
+    b.check=raced
+    with pytest.raises(ValueError,match='身份已变化'):s.check_account(a['id'])
+    assert s.account(a['id'])['identity']=='other-user'
+
+
 def post(s, aid, **changes):
     value = dict(request_id='request-test-00001', title='测试标题', body='本地模拟测试正文', targets=[{'account_id': aid, 'destination': ''}])
     value.update(changes)

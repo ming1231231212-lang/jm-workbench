@@ -69,10 +69,20 @@ class Community:
         if a['identity'] and a['identity']!=identity:
             raise ValueError('登录身份已变化，请重新配置账号；不能替换原任务的身份')
         with self.store.connect(True) as db:
-            if db.execute('SELECT version FROM community_accounts WHERE id=?',(ident,)).fetchone()['version']!=a['version']:
+            current=db.execute('SELECT version,identity FROM community_accounts WHERE id=?',(ident,)).fetchone()
+            if not current or current['version']!=a['version']:
                 raise ValueError('核验期间账号配置已改变，请重新检查')
+            if current['identity'] and current['identity']!=identity:
+                raise ValueError('登录身份已变化，请重新配置账号；不能替换原任务的身份')
             db.execute('UPDATE community_accounts SET identity=?,checked=? WHERE id=?',(identity,self.clock(),ident))
         return {'message':'账号身份已核验；发帖权限会在实际提交时由平台校验','account':self.account(ident)}
+
+    def sync_account(self,ident):
+        a=self.account(ident)
+        if a['platform']!='tieba' or not a['enabled']:
+            raise ValueError('自动同步仅适用于已启用的贴吧浏览器账号')
+        try:return {'status':'verified',**self.check_account(ident)}
+        except ValueError as ex:return {'status':'pending','message':str(ex)}
 
     def open_account(self,ident):
         a=self.account(ident,True)

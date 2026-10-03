@@ -19,6 +19,9 @@ def router(service):
     @api.post('/accounts/{ident}/check')
     def check(ident:str):return service.check_account(ident)
 
+    @api.post('/accounts/{ident}/sync')
+    def sync(ident:str):return service.sync_account(ident)
+
     @api.post('/accounts/{ident}/open')
     def open_account(ident:str):return service.open_account(ident)
 

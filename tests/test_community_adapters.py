@@ -1,6 +1,6 @@
 import pytest
 from jm_workbench.core.config import Config
-from jm_workbench.community.adapters import CommunityAdapter,NotSubmitted,tieba_receipt
+from jm_workbench.community.adapters import CommunityAdapter,NotSubmitted,tieba_receipt,tieba_identity
 from jm_workbench.community.registry import destination,safe_post_url
 
 
@@ -57,3 +57,38 @@ def test_dev_frontmatter_preflight_and_x_limit(tmp_path):
     with pytest.raises(NotSubmitted):a.publish({'platform':'dev'},'secret',{'title':'test','body':'---\npublished: false\n---'},'')
     with pytest.raises(NotSubmitted):a.publish({'platform':'x'},'secret',{'title':'test','body':'x'*300},'')
     assert not calls
+
+
+@pytest.mark.parametrize('name',['', 'original', 'renamed'])
+def test_tieba_identity_does_not_depend_on_nickname(name):
+    from types import SimpleNamespace
+    page=SimpleNamespace(url='https://tieba.baidu.com/',evaluate=lambda _:dict(authenticated=True,id='123',name=name))
+    assert tieba_identity(page)=='123'
+
+
+@pytest.mark.parametrize('data',[
+    dict(authenticated=False,id='123',name='stale'),
+    dict(authenticated=True,id='0',name='name'),
+    dict(authenticated=True,id='',name='name'),
+])
+def test_tieba_identity_requires_authenticated_id(data):
+    from types import SimpleNamespace
+    with pytest.raises(NotSubmitted):
+        tieba_identity(SimpleNamespace(url='https://tieba.baidu.com/',evaluate=lambda _:data))
+
+
+def test_tieba_browser_disconnect_is_actionable(tmp_path):
+    a=CommunityAdapter(Config(tmp_path))
+    with pytest.raises(NotSubmitted,match='浏览器未连接'):
+        a.check({'platform':'tieba','profile_dir':str(tmp_path/'missing-profile')},'')
+
+
+def test_existing_tab_sync_never_opens_page_and_rejects_conflicting_accounts():
+    from types import SimpleNamespace
+    from jm_workbench.community.adapters import tieba_existing_identity
+    def page(identity):return SimpleNamespace(url='https://tieba.baidu.com/',evaluate=lambda _:dict(authenticated=True,id=identity))
+    with pytest.raises(NotSubmitted,match='打开百度贴吧'):
+        tieba_existing_identity(SimpleNamespace(pages=[]))
+    with pytest.raises(NotSubmitted,match='身份不一致'):
+        tieba_existing_identity(SimpleNamespace(pages=[page('123'),page('456')]))
+    assert tieba_existing_identity(SimpleNamespace(pages=[page('123'),page('123')]))=='123'

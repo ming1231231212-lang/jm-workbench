@@ -7,6 +7,7 @@ import urllib.request
 from pathlib import Path
 from urllib.parse import urlencode, urlparse
 from ..adapters.chrome import endpoint
+from ..adapters.errors import LocalBrowserError
 from .registry import platform, compose_url, safe_post_url, destination
 
 
@@ -37,15 +38,33 @@ def http_json(method, url, headers, data=None, form=False):
 
 
 def tieba_identity(page):
+    if urlparse(page.url).hostname!='tieba.baidu.com':
+        raise NotSubmitted('请在账号浏览器打开百度贴吧，完成登录后会自动同步')
     data=page.evaluate('''() => {
       const root=[...document.querySelectorAll('.pc-main-page-layout, .top-bar-wrapper')].find(e=>e.__vue__?.$pinia);
       const state=root?.__vue__.$pinia.state.value.userStore;
-      const u=state?.isLogin ? state.user : (window.PageData?.user || {});
-      return {id:String(u.user_id||u.id||''), name:String(u.user_name||u.name||'')};
+      const u=state ? (state.user || {}) : (window.PageData?.user || {});
+      const flag=state ? state.isLogin : (u.is_login ?? u.isLogin);
+      return {authenticated:flag===true || flag===1 || flag==='1', id:String(u.user_id||u.id||'').trim()};
     }''')
-    if not data.get('id') or data['id']=='0' or not data.get('name'):
-        raise NotSubmitted('未能核验贴吧登录身份，请在该账号浏览器登录后重新检查')
-    return data['id']+':'+data['name']
+    if not data.get('authenticated') or not data.get('id') or data['id']=='0':
+        raise NotSubmitted('等待贴吧登录，请在账号浏览器完成登录；页面加载完成后会自动同步')
+    # Nickname can be empty or changed. Only the stable platform ID is an identity.
+    return data['id']
+
+
+def tieba_existing_identity(context):
+    """Inspect only this account's already-open pages; never navigate or create tabs."""
+    pages=[p for p in context.pages if urlparse(p.url).hostname=='tieba.baidu.com']
+    if not pages:raise NotSubmitted('浏览器已连接，请在该账号窗口打开百度贴吧并登录')
+    identities=set();message='贴吧页面正在加载，稍后会自动同步'
+    for page in pages:
+        try:identities.add(tieba_identity(page))
+        except NotSubmitted as ex:message=str(ex)
+        except Exception:continue # A tab can navigate/close while being inspected.
+    if len(identities)>1:raise NotSubmitted('多个贴吧页面的身份不一致，请刷新账号页面后重新检查')
+    if identities:return identities.pop()
+    raise NotSubmitted(message)
 
 
 def tieba_receipt(data):
@@ -173,16 +192,18 @@ class CommunityAdapter:
     def tieba(self, account, payload, target):
         from playwright.sync_api import sync_playwright
         try:ws=endpoint(account['profile_dir'])
-        except ValueError:raise NotSubmitted('账号浏览器未连接，请先打开并登录') from None
+        except LocalBrowserError:raise NotSubmitted('账号浏览器未连接，请先点击“登录 / 打开”') from None
         with sync_playwright() as pw:
-            browser=pw.chromium.connect_over_cdp(ws,timeout=15000)
+            try:browser=pw.chromium.connect_over_cdp(ws,timeout=10000)
+            except Exception:raise NotSubmitted('账号浏览器连接超时，请检查该账号Chrome是否仍在运行') from None
+            if not browser.contexts:raise NotSubmitted('账号浏览器尚未就绪，请稍后检查')
             context=browser.contexts[0]
+            if payload is None:return tieba_existing_identity(context)
             page=context.new_page()
             try:
-                page.goto(compose_url('tieba',target) if payload else platform('tieba')['home'],wait_until='domcontentloaded',timeout=20000)
+                page.goto(compose_url('tieba',target),wait_until='domcontentloaded',timeout=20000)
                 page.locator('.pc-main-page-layout').wait_for(state='visible',timeout=10000)
                 identity=tieba_identity(page)
-                if payload is None:return identity
                 if identity!=account['identity']:raise NotSubmitted('贴吧登录身份变化')
                 return tieba_fill_and_submit(page,payload,account['identity'],target)
             finally:

@@ -353,6 +353,12 @@ document.addEventListener("submit", async (event) => {
 window.addEventListener("hashchange", () => {
   if (state) render().catch((ex) => toast(ex.message, true));
 });
+function syncCommunityOnReturn() {
+  if (page === "community" && !busy && !dialog.open && document.visibilityState === "visible")
+    refresh().catch(() => {});
+}
+window.addEventListener("focus", syncCommunityOnReturn);
+document.addEventListener("visibilitychange", syncCommunityOnReturn);
 refresh().catch((ex) => {
   content.innerHTML = `<div class="empty"><h2>暂时连接不到JM工作台</h2><p>${e(ex.message)}</p><button class="button" data-action="refresh">重新连接</button></div>`;
 });

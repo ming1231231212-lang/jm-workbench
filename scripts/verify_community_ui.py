@@ -8,7 +8,8 @@ import uvicorn
 from playwright.sync_api import sync_playwright, expect
 from jm_workbench.web.app import create_app
 from jm_workbench.adapters.chrome import endpoint
-from jm_workbench.community.adapters import tieba_fill_and_submit, NotSubmitted
+from jm_workbench.community.adapters import tieba_fill_and_submit, tieba_identity, tieba_existing_identity, NotSubmitted
+from types import SimpleNamespace
 
 ROOT=Path(__file__).resolve().parents[1]
 
@@ -18,7 +19,10 @@ def main():
     class Fake:
         sent=[]
         failure=False
-        def check(self,a,secret):return 'qa-id:qa-user'
+        logged_in=False
+        def check(self,a,secret):
+            if not self.logged_in:raise NotSubmitted('等待贴吧登录')
+            return '123'
         def publish(self,a,secret,payload,target):
             self.sent.append((payload['title'],target))
             if self.failure:raise TimeoutError()
@@ -40,6 +44,7 @@ def main():
         browser=pw.chromium.connect_over_cdp(endpoint(Path(r'D:\Codex\个人工作台\项目\Codex-Chrome\User Data')),timeout=15000)
         context=browser.contexts[0];original=list(context.pages)
         page=context.new_page();page.set_viewport_size({'width':1440,'height':980});page.set_default_timeout(10000)
+        page.clock.install()
         page.on('pageerror',lambda error:errors.append(str(error)))
         fixture=None
         def refresh():
@@ -57,8 +62,15 @@ def main():
             expect(page.locator('#dialog')).not_to_be_visible()
             expect(page.locator('#content')).to_contain_text('贴吧验收账号')
             check('account saved; no send',not fake.sent)
+            expect(page.locator('#content')).to_contain_text('等待贴吧登录')
+            fake.logged_in=True
+            page.clock.fast_forward(31000)
+            page.evaluate("window.dispatchEvent(new Event('focus'))")
+            expect(page.locator('#content')).to_contain_text('已登录 · 已同步')
+            check('return to workbench automatically syncs login without publishing',not fake.sent)
             page.locator('[data-action="com-check"]').click()
-            expect(page.locator('#content')).to_contain_text('身份已核验')
+            expect(page.locator('#toast')).to_contain_text('账号身份已核验')
+            expect(page.locator('[data-action="com-check"]')).to_be_enabled()
             check('identity check')
             page.locator('[data-action="com-new"]').click()
             page.locator('[name="title"]').fill('浏览器验收文字主题帖')
@@ -111,7 +123,7 @@ def main():
             # Entire fixture page traffic is intercepted, including the write.
             # This tests the actual editor adapter with browser events, without live posting.
             fixture=context.new_page();calls=[]
-            html='''<div class="pc-main-page-layout"></div><div id="tb-editor-title"><div class="ql-editor" contenteditable="true"></div></div><div id="tb-editor-content"><div class="ql-editor" contenteditable="true"></div></div><div class="footer-safe-issue"><button class="issue-btn" onclick="fetch('/c/c/thread/add_pc',{method:'POST',body:'test'}).then(()=>fetch('/c/c/thread/add_pc',{method:'POST',body:'duplicate'}))">发布</button></div><script>document.querySelector('.pc-main-page-layout').__vue__={$pinia:{state:{value:{userStore:{isLogin:true,user:{user_id:'123',name:'tester'}},publishStore:{selectedForum:{name:'人工智能'}}}}}};</script>'''
+            html='''<div class="pc-main-page-layout"></div><div id="tb-editor-title"><div class="ql-editor" contenteditable="true"></div></div><div id="tb-editor-content"><div class="ql-editor" contenteditable="true"></div></div><div class="footer-safe-issue"><button class="issue-btn" onclick="fetch('/c/c/thread/add_pc',{method:'POST',body:'test'}).then(()=>fetch('/c/c/thread/add_pc',{method:'POST',body:'duplicate'}))">发布</button></div><script>document.querySelector('.pc-main-page-layout').__vue__={$pinia:{state:{value:{userStore:{isLogin:true,user:{user_id:'123',name:''}},publishStore:{selectedForum:{name:'人工智能'}}}}}};</script>'''
             def route(r):
                 if '/c/c/thread/add_pc' in r.request.url:
                     calls.append(r.request.post_data)
@@ -120,7 +132,17 @@ def main():
                 else:r.abort()
             fixture.route('**/*',route)
             fixture.goto('https://tieba.baidu.com/f?kw=test')
-            receipt=tieba_fill_and_submit(fixture,{'title':'模拟新版贴吧标题','body':'模拟正文'},'123:tester','人工智能')
+            check('empty nickname is a valid logged-in identity',tieba_identity(fixture)=='123')
+            fixture.evaluate("document.querySelector('.pc-main-page-layout').__vue__.$pinia.state.value.userStore.user.name='renamed'")
+            check('nickname change preserves stable identity',tieba_identity(fixture)=='123')
+            check('existing-page sync is read-only',tieba_existing_identity(SimpleNamespace(pages=[fixture]))=='123' and not calls)
+            fixture.evaluate("document.querySelector('.pc-main-page-layout').__vue__.$pinia.state.value.userStore.isLogin=false;window.PageData={user:{is_login:1,user_id:'123',user_name:'stale'}}")
+            try:tieba_identity(fixture)
+            except NotSubmitted:pass
+            else:raise AssertionError('logged-out Pinia accepted stale legacy identity')
+            check('logout rejects stale user and legacy state',not calls)
+            fixture.evaluate("document.querySelector('.pc-main-page-layout').__vue__.$pinia.state.value.userStore.isLogin=true")
+            receipt=tieba_fill_and_submit(fixture,{'title':'模拟新版贴吧标题','body':'模拟正文'},'123','人工智能')
             fixture.wait_for_timeout(150)
             check('new Tieba editor fills and receives ID',receipt['post_id']=='456789')
             check('site duplicate POST suppressed',len(calls)==1)
