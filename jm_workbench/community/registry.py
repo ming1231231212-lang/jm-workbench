@@ -4,7 +4,7 @@ from urllib.parse import quote, urlparse
 
 _ROWS = [
     ('zhihu','知乎','国内','AI应用 互联网 职场','web','https://www.zhihu.com/','https://zhuanlan.zhihu.com/write','文章/问答','',100),
-    ('tieba','百度贴吧','国内','AI 互联网 综合兴趣','browser','https://tieba.baidu.com/','https://tieba.baidu.com/','文字主题帖（标题5–31字，正文≤2000字）','吧名，如人工智能；名称本身带“吧”字时保留',31),
+    ('tieba','百度贴吧','国内','AI 互联网 综合兴趣','browser','https://tieba.baidu.com/','https://tieba.baidu.com/','文字主题帖 / 顶层评论（正文≤2000字）','吧名，如人工智能；名称本身带“吧”字时保留',31),
     ('xiaohongshu','小红书','国内','AI工具 效率 生活','web','https://www.xiaohongshu.com/','https://creator.xiaohongshu.com/publish/publish','笔记','',20),
     ('csdn','CSDN','国内','AI开发 编程 技术','web','https://www.csdn.net/','https://editor.csdn.net/md/','博客','',100),
     ('juejin','稀土掘金','国内','AI编程 互联网 开发','web','https://juejin.cn/','https://juejin.cn/editor/drafts/new?v=2','文章/沸点','',100),

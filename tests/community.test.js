@@ -1,6 +1,17 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import {communityPayload,communityPage,CommunityUI} from '../jm_workbench/web/static/community.js';
+import {dailyPage,dailyAction} from '../jm_workbench/web/static/community-daily.js';
+
+test('daily overview distinguishes planned submitted waiting and shortage',()=>{
+ const html=dailyPage({plans:[{id:'p',state:'enabled',payload:{name:'<script>name',hour:10,minute:0,board:'ai工具',topics:[],replies:[],reply_rules:[]},remaining_topics:2,remaining_replies:3,message:'合适目标不足',days:[{day:'2026-10-03',message:'计划已安排',counts:{thread:{submitted:1,waiting:0,failed:0},reply:{submitted:0,waiting:5,failed:0}}}]}]});
+ assert.match(html,/已提交 1\/1/);assert.match(html,/已提交 0\/5/);assert.match(html,/等待 5/);assert.match(html,/合适目标不足/);assert.ok(!html.includes('<script>'));
+});
+
+test('daily pause targets the exact plan',async()=>{
+ const calls=[];await dailyAction({data:{plans:[{id:'p'}]},request:async(...args)=>{calls.push(args);return {message:'paused'};},toast:()=>{},fresh:async()=>{}},'com-plan-pause','p');
+ assert.equal(calls[0][0],'/api/community/plans/p/pause');
+});
 
 test('community targets retain destination and schedule',()=>{
  const fd=new FormData();

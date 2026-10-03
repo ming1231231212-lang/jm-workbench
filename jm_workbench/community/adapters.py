@@ -2,6 +2,7 @@
 import json
 import re
 import subprocess
+import time
 import urllib.error
 import urllib.request
 from pathlib import Path
@@ -142,6 +143,13 @@ def tieba_reply_and_submit(page,payload,expected,target):
     target=tieba_thread_url(target)
     if tieba_thread_url(page.url)!=target or tieba_identity(page)!=expected:
         raise NotSubmitted('评论目标或贴吧身份发生变化，未提交')
+    if payload.get('source_title'):
+        try:actual=page.locator('.pb-title').first.inner_text(timeout=5000).strip()
+        except Exception:raise NotSubmitted('原帖标题无法核验，未提交') from None
+        if actual!=payload['source_title']:raise NotSubmitted('原帖内容发生变化，未提交')
+        if payload.get('source_excerpt'):
+            actual_body=page.locator('.pb-content-wrap').first.inner_text(timeout=5000).strip()
+            if not actual_body.startswith(payload['source_excerpt'].strip()):raise NotSubmitted('原帖正文发生变化，未提交')
     for selector in ('iframe[src*="captcha"]','iframe[src*="verify"]','.geetest_panel','.vcode-dialog'):
         if page.locator(selector).count() and page.locator(selector).first.is_visible():
             raise NotSubmitted('贴吧要求安全验证，评论已停止')
@@ -204,6 +212,41 @@ class CommunityAdapter:
         else:identity=str(data.get('id') or data.get('name') or '')
         if not identity:raise NotSubmitted('平台未返回可核验的账号身份')
         return identity
+
+    def discover(self,account,boards):
+        """Read a bounded set of recent public threads; never click interaction buttons."""
+        from playwright.sync_api import sync_playwright
+        with sync_playwright() as pw:
+            browser=pw.chromium.connect_over_cdp(endpoint(account['profile_dir']),timeout=10000)
+            context=browser.contexts[0]
+            if tieba_existing_identity(context)!=account['identity']:raise NotSubmitted('候选读取前身份变化')
+            page=context.new_page();links=[];result=[]
+            try:
+                for board in boards:
+                    page.goto(compose_url('tieba',board),wait_until='domcontentloaded',timeout=15000)
+                    page.locator('.pc-main-page-layout').wait_for(timeout=8000)
+                    for _ in range(2):
+                        page.mouse.wheel(0,850);page.wait_for_timeout(500)
+                        for value in page.locator('a[href*="/p/"]').evaluate_all('(xs)=>xs.filter(x=>x.innerText.length>12).map(x=>x.href)'):
+                            try:url=tieba_thread_url(value)
+                            except ValueError:continue
+                            if url not in links:links.append(url)
+                        if len(links)>=18:break
+                for url in links[:18]:
+                    try:
+                        page.goto(url,wait_until='domcontentloaded',timeout=15000)
+                        page.locator('.pb-title').first.wait_for(timeout=5000)
+                        meta=page.evaluate('''()=>{const t=document.querySelector('.pc-main-page-layout')?.__vue__?.$pinia?.state.value.pbStore?.thread;
+                          return {id:String(t?.id||''),author_id:String(t?.author?.id||''),created:Number(t?.create_time||0)};}''')
+                        if meta['id']!=url.rsplit('/',1)[-1] or not meta['author_id'] or meta['author_id']==account['identity']:continue
+                        if not 0<=time.time()-meta['created']<=30*86400:continue
+                        title=page.locator('.pb-title').first.inner_text().strip()
+                        excerpt=page.locator('.pb-content-wrap').first.inner_text().strip()[:6000]
+                        if not title or not excerpt:continue
+                        result.append({'url':url,'title':title[:200],'excerpt':excerpt,**meta})
+                    except Exception:continue
+            finally:page.close()
+            return result
 
     def publish(self, account, secret, payload, target):
         p=account['platform']

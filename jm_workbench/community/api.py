@@ -1,5 +1,5 @@
 from fastapi import APIRouter, Query
-from .models import CommunityAccount, CommunityPost, LinkRecord, ResolveRecord, ClearRecord
+from .models import CommunityAccount, CommunityPost, LinkRecord, ResolveRecord, ClearRecord, DailyPlan
 
 
 def router(service):
@@ -7,6 +7,18 @@ def router(service):
 
     @api.get('/state')
     def state():return service.state()
+
+    @api.post('/plans')
+    def save_plan(payload:DailyPlan):return service.daily.save(payload)
+
+    @api.put('/plans/{ident}')
+    def edit_plan(ident:str,payload:DailyPlan):return service.daily.save(payload,ident)
+
+    @api.post('/plans/{ident}/{action}')
+    def plan_control(ident:str,action:str):
+        if action=='today':
+            with service.step_lock:return service.daily.control(ident,action)
+        return service.daily.control(ident,action)
 
     @api.post('/accounts')
     def account(payload:CommunityAccount):return service.save_account(payload)

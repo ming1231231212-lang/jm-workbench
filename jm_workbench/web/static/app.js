@@ -210,14 +210,14 @@ document.addEventListener("click", async (event) => {
   if (!target) return;
   event.preventDefault();
   if (busy) return;
-  busy = true;
+  setBusy(true);
   target.disabled = true;
   try {
     await action(target.dataset.action, target.dataset.id);
   } catch (ex) {
     toast(ex.message, true);
   } finally {
-    busy = false;
+    setBusy(false);
     target.disabled = false;
   }
 });
@@ -225,13 +225,13 @@ document.addEventListener("change", async (event) => {
   const el = event.target;
   if (el.matches("[data-pub-upload]")) {
     if (busy) return;
-    busy = true;
+    setBusy(true);
     try {
       await publishing.upload(el.files);
     } catch (ex) {
       toast(ex.message, true);
     } finally {
-      busy = false;
+      setBusy(false);
       el.value = "";
     }
     return;
@@ -249,7 +249,7 @@ document.addEventListener("change", async (event) => {
       el.checked = !el.checked;
       return;
     }
-    busy = true;
+    setBusy(true);
     el.disabled = true;
     try {
       await request("/api/matrix", {
@@ -263,7 +263,7 @@ document.addEventListener("change", async (event) => {
       el.checked = !el.checked;
       toast(ex.message, true);
     } finally {
-      busy = false;
+      setBusy(false);
       el.disabled = false;
     }
   }
@@ -306,7 +306,7 @@ document.addEventListener("submit", async (event) => {
     await render();
     return;
   }
-  busy = true;
+  setBusy(true);
   const submit = form.querySelector('button:not([type="button"])');
   if (submit) submit.disabled = true;
   const data = Object.fromEntries(new FormData(form)),
@@ -346,7 +346,7 @@ document.addEventListener("submit", async (event) => {
   } catch (ex) {
     toast(ex.message, true);
   } finally {
-    busy = false;
+    setBusy(false);
     if (submit) submit.disabled = false;
   }
 });
@@ -374,3 +374,8 @@ setInterval(() => {
   )
     refresh().catch(() => {});
 }, 10000);
+
+function setBusy(value) {
+  busy = value;
+  document.body.setAttribute("aria-busy", String(value));
+}
