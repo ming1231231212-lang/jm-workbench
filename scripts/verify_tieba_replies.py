@@ -3,7 +3,7 @@ import json
 from pathlib import Path
 from playwright.sync_api import sync_playwright
 from jm_workbench.adapters.chrome import endpoint
-from jm_workbench.community.adapters import tieba_reply_and_submit,NotSubmitted
+from jm_workbench.community.adapters import tieba_reply_and_submit,NotSubmitted,tieba_editor_text
 
 HTML='''<div class="pc-main-page-layout"></div><div class="pc-pb-reply-box"><div id="tb-editor-pb-content"><div class="ql-editor" contenteditable="true"></div></div><button class="publish-btn">发布</button></div>
 <script>document.querySelector('.pc-main-page-layout').__vue__={$pinia:{state:{value:{userStore:{isLogin:true,user:{user_id:'test-user'}}}}}};
@@ -31,6 +31,10 @@ def main():
                 except NotSubmitted:pass
                 else:raise AssertionError('preflight should reject')
             assert len(calls)==1;checks.append('identity target and existing draft block submission')
+            editor=p.locator('.ql-editor')
+            editor.evaluate("e=>{e.innerHTML='<p>第一段内容</p><p><br></p><p>第二段内容</p>';e.querySelectorAll('p').forEach(p=>p.style.margin='20px 0');}")
+            assert tieba_editor_text(editor)=='第一段内容\n\n第二段内容'
+            checks.append('actual Quill paragraph spacing does not change content validation')
         finally:p.close()
         assert all(not p.is_closed() for p in original);checks.append('original browser pages preserved')
     print(json.dumps({'checks':checks,'real_sends':0},ensure_ascii=False))

@@ -95,6 +95,16 @@ def tieba_receipt(data):
     return {'post_id':str(ident),'url':'https://tieba.baidu.com/p/'+str(ident),'visibility':'unverified'}
 
 
+def tieba_editor_text(editor):
+    # Chrome innerText adds CSS paragraph spacing; Quill serializes one newline
+    # per block. Preserve real blank paragraphs, never ignore words or punctuation.
+    return editor.evaluate(r'''e=>{
+      const blocks=Array.from(e.children);
+      return blocks.length && blocks.every(n=>n.tagName==='P')
+        ? blocks.map(n=>n.innerText.replace(/[\r\n]+$/,'')).join('\n') : e.innerText;
+    }''').strip()
+
+
 def tieba_fill_and_submit(page, payload, expected, target):
     """Only the exact visible editor is supported; no guessed clicks or retries."""
     if urlparse(page.url).hostname!='tieba.baidu.com':
@@ -122,8 +132,8 @@ def tieba_fill_and_submit(page, payload, expected, target):
         raise NotSubmitted('贴吧编辑器已有未保存内容，已保留；请在网站处理后继续')
     title.fill(payload['title'])
     body.fill(payload['body'])
-    if title.inner_text().strip()!=payload['title'] or body.inner_text().strip()!=payload['body'].strip():
-        raise NotSubmitted('编辑器内容核对未通过，未点击发布')
+    if tieba_editor_text(title)!=payload['title'] or tieba_editor_text(body)!=payload['body'].strip():
+        raise PreflightStopped('编辑器内容核对未通过，未点击发布')
     if tieba_identity(page)!=expected:
         raise NotSubmitted('发布前身份变化，未点击发布')
     # From this line onward any failure is uncertain. Never click a second time.
@@ -181,7 +191,7 @@ def tieba_reply_and_submit(page,payload,expected,target):
     if editor.count()!=1 or submit.count()!=1:raise NotSubmitted('回复编辑器发生变化，未提交')
     if editor.inner_text().strip():raise NotSubmitted('回复编辑器已有内容，已保留，未提交')
     editor.fill(payload['body'])
-    if editor.inner_text().strip()!=payload['body'].strip():raise NotSubmitted('评论正文核对失败，未提交')
+    if tieba_editor_text(editor)!=payload['body'].strip():raise PreflightStopped('评论正文核对失败，未提交')
     if tieba_identity(page)!=expected or tieba_thread_url(page.url)!=target:
         raise NotSubmitted('提交前账号或目标变化，未提交')
     count=[0];blocked=[False]
