@@ -1,0 +1,191 @@
+"""One attempt only. API errors after an ambiguous response never trigger retries."""
+import json
+import re
+import subprocess
+import urllib.error
+import urllib.request
+from pathlib import Path
+from urllib.parse import urlencode, urlparse
+from ..adapters.chrome import endpoint
+from .registry import platform, compose_url, safe_post_url, destination
+
+
+class NotSubmitted(ValueError):
+    """Definitively no write, e.g. failed preflight or explicit API rejection."""
+
+
+class NoRedirect(urllib.request.HTTPRedirectHandler):
+    def redirect_request(self, *args, **kwargs):
+        return None
+
+
+def http_json(method, url, headers, data=None, form=False):
+    payload=None if data is None else (urlencode(data).encode() if form else json.dumps(data).encode())
+    headers={'User-Agent':'JMWorkbench/1.0 (local authorized community publisher)', **headers}
+    if data is not None:
+        headers['Content-Type']='application/x-www-form-urlencoded' if form else 'application/json'
+    req=urllib.request.Request(url,data=payload,headers=headers,method=method)
+    # No redirect of an Authorization header or POST, no retry transport.
+    try:
+        with urllib.request.build_opener(NoRedirect()).open(req,timeout=25) as response:
+            return json.loads(response.read(2_000_000))
+    except urllib.error.HTTPError as ex:
+        if 400<=ex.code<500:
+            message={401:'登录授权已过期',403:'账号没有发布权限或平台限制',429:'平台限流，已停止本平台任务'}.get(ex.code,'平台拒绝请求，请检查内容和板块')
+            raise NotSubmitted(message) from None
+        raise RuntimeError('请求结果不明，请到平台核实，工作台不会重发') from None
+
+
+def tieba_identity(page):
+    data=page.evaluate('''() => {
+      const root=[...document.querySelectorAll('.pc-main-page-layout, .top-bar-wrapper')].find(e=>e.__vue__?.$pinia);
+      const state=root?.__vue__.$pinia.state.value.userStore;
+      const u=state?.isLogin ? state.user : (window.PageData?.user || {});
+      return {id:String(u.user_id||u.id||''), name:String(u.user_name||u.name||'')};
+    }''')
+    if not data.get('id') or data['id']=='0' or not data.get('name'):
+        raise NotSubmitted('未能核验贴吧登录身份，请在该账号浏览器登录后重新检查')
+    return data['id']+':'+data['name']
+
+
+def tieba_receipt(data):
+    inner=data.get('data') if isinstance(data.get('data'),dict) else {}
+    codes=[data.get('error_code'),data.get('errno'),inner.get('error_code')]
+    if any(c is not None and str(c)!='0' for c in codes):
+        raise NotSubmitted('贴吧拒绝发布或要求安全验证，已停止；请到网站处理')
+    ident=inner.get('tid') or inner.get('thread_id') or data.get('tid') or data.get('thread_id')
+    if not ident or not re.fullmatch(r'[0-9]+',str(ident)):
+        raise RuntimeError('贴吧未返回明确帖子编号，结果不明')
+    return {'post_id':str(ident),'url':'https://tieba.baidu.com/p/'+str(ident),'visibility':'unverified'}
+
+
+def tieba_fill_and_submit(page, payload, expected, target):
+    """Only the exact visible editor is supported; no guessed clicks or retries."""
+    if urlparse(page.url).hostname!='tieba.baidu.com':
+        raise NotSubmitted('贴吧页面发生跳转，请先完成登录或验证')
+    if tieba_identity(page)!=expected:
+        raise NotSubmitted('贴吧当前身份已变化，已停止发送')
+    for selector in ('iframe[src*="captcha"]','iframe[src*="verify"]','.geetest_panel','.vcode-dialog'):
+        if page.locator(selector).count() and page.locator(selector).first.is_visible():
+            raise NotSubmitted('贴吧要求安全验证，请在网站完成，任务已停止')
+    # Current PC editor (observed 2026-10-03): two Quill editors in a publisher dialog.
+    if page.locator('#tb-editor-title').count()==0:
+        launch=page.locator('.forum-operate .operate-btn.publish:visible')
+        if launch.count()!=1:raise NotSubmitted('没有找到当前吧的发贴入口，未提交')
+        launch.click(timeout=5000)
+    title=page.locator('#tb-editor-title .ql-editor[contenteditable="true"]:visible')
+    body=page.locator('#tb-editor-content .ql-editor[contenteditable="true"]:visible')
+    try:title.wait_for(state='visible',timeout=10000)
+    except Exception:raise NotSubmitted('发贴编辑器未打开，请检查登录和板块权限') from None
+    submit=page.locator('.footer-safe-issue .issue-btn:visible')
+    if title.count()!=1 or body.count()!=1 or submit.count()!=1:
+        raise NotSubmitted('贴吧编辑器不可用或已变化，未点击发布')
+    selected=page.evaluate('''()=>{const root=document.querySelector('.pc-main-page-layout');const s=root?.__vue__?.$pinia?.state.value.publishStore?.selectedForum;return s?.name||s?.forum_name||'';}''')
+    if selected!=target:raise NotSubmitted('编辑器所选贴吧与任务不一致，未提交')
+    if title.inner_text().strip() or body.inner_text().strip():
+        raise NotSubmitted('贴吧编辑器已有未保存内容，已保留；请在网站处理后继续')
+    title.fill(payload['title'])
+    body.fill(payload['body'])
+    if title.inner_text().strip()!=payload['title'] or body.inner_text().strip()!=payload['body'].strip():
+        raise NotSubmitted('编辑器内容核对未通过，未点击发布')
+    if tieba_identity(page)!=expected:
+        raise NotSubmitted('发布前身份变化，未点击发布')
+    # From this line onward any failure is uncertain. Never click a second time.
+    count=[0]
+    def once(route):
+        if route.request.method!='POST':return route.fallback()
+        count[0]+=1
+        if count[0]>1:return route.abort('blockedbyclient')
+        route.fallback()
+    page.route('**/c/c/thread/add_pc*',once)
+    with page.expect_response(lambda r:urlparse(r.url).hostname=='tieba.baidu.com' and urlparse(r.url).path=='/c/c/thread/add_pc' and r.request.method=='POST',timeout=25000) as waiting:
+        submit.click(timeout=10000)
+    response=waiting.value
+    if response.status in (400,401,403,422,429):raise NotSubmitted('贴吧拒绝请求，已暂停本平台')
+    if not response.ok:raise RuntimeError('贴吧请求结果不明')
+    return tieba_receipt(response.json())
+
+
+class CommunityAdapter:
+    def __init__(self, config, transport=http_json):
+        self.config,self.transport=config,transport
+
+    def headers(self, account, secret):
+        if not secret:raise NotSubmitted('尚未配置API密钥，请到社区账号填写')
+        if '\n' in secret or '\r' in secret:raise NotSubmitted('API密钥格式无效')
+        return {'api-key':secret} if account['platform']=='dev' else {'Authorization':'Bearer '+secret}
+
+    def check(self, account, secret):
+        p=account['platform']
+        if p=='tieba':
+            return self.tieba(account, None, '')
+        if not platform(p)['automatic']:raise NotSubmitted('此平台使用网页发布，不提供自动身份核验')
+        url={'dev':'https://dev.to/api/users/me','x':'https://api.x.com/2/users/me',
+             'reddit':'https://oauth.reddit.com/api/v1/me','huggingface':'https://huggingface.co/api/whoami-v2'}[p]
+        data=self.transport('GET',url,self.headers(account,secret))
+        if p=='x':identity=str(data.get('data',{}).get('id',''))
+        elif p=='dev':identity=str(data.get('id',''))
+        else:identity=str(data.get('id') or data.get('name') or '')
+        if not identity:raise NotSubmitted('平台未返回可核验的账号身份')
+        return identity
+
+    def publish(self, account, secret, payload, target):
+        p=account['platform']
+        destination(p,target)
+        if p=='tieba':return self.tieba(account,payload,target)
+        if p not in ('dev','x','reddit','huggingface'):raise NotSubmitted('此平台尚未实现自动提交，请使用网页发布')
+        headers=self.headers(account,secret)
+        if p=='dev':
+            # Frontmatter takes precedence on Forem. Disallow it to preserve snapshot semantics.
+            if payload['body'].lstrip().startswith('---'):raise NotSubmitted('DEV正文不能以YAML配置头开头，请直接填写文章正文')
+            data=self.transport('POST','https://dev.to/api/articles',headers,{'article':{'title':payload['title'],'body_markdown':payload['body'],'published':True,'tags':payload.get('tags',[])}})
+            ident=data.get('id');url=data.get('url')
+        elif p=='x':
+            text=payload['title']+'\n\n'+payload['body']
+            if len(text)>280:raise NotSubmitted('X文本超出本版本280字符限制，请缩短标题与正文')
+            data=self.transport('POST','https://api.x.com/2/tweets',headers,{'text':text})
+            ident=data.get('data',{}).get('id');url='https://x.com/i/status/'+str(ident)
+        elif p=='reddit':
+            data=self.transport('POST','https://oauth.reddit.com/api/submit',headers,{'api_type':'json','kind':'self','sr':target,'title':payload['title'],'text':payload['body'],'resubmit':'false'},form=True)
+            result=data.get('json',{})
+            if result.get('errors'):raise NotSubmitted('Reddit拒绝发帖，请检查社区权限、内容要求和限流状态')
+            ident=result.get('data',{}).get('id');url=result.get('data',{}).get('url')
+        else:
+            bits=target.split('/')
+            kind=bits[0] if len(bits)==3 else 'models'
+            repo='/'.join(bits[-2:])
+            data=self.transport('POST',f'https://huggingface.co/api/{kind}/{repo}/discussions',headers,{'title':payload['title'],'description':payload['body'],'pullRequest':False})
+            ident=data.get('num');prefix='' if kind=='models' else kind+'/'
+            url=f'https://huggingface.co/{prefix}{repo}/discussions/{ident}'
+        if not ident or not url:raise RuntimeError('平台未返回帖子编号，结果不明，请勿重发')
+        return {'post_id':str(ident),'url':safe_post_url(p,url),'visibility':'unverified'}
+
+    def open(self, account, url):
+        p=Path(account['profile_dir']).resolve()
+        p.mkdir(parents=True,exist_ok=True)
+        chrome=Path(self.config.values['chrome_path'])
+        if not chrome.is_file():raise ValueError('未找到Chrome，请检查工作台设置')
+        safe_post_url(account['platform'],url)
+        # A visible window is intentional: the user pressed 登录/打开网页.
+        subprocess.Popen([str(chrome),f'--user-data-dir={p}','--remote-debugging-port=0','--no-first-run','--no-default-browser-check',url],stdout=subprocess.DEVNULL,stderr=subprocess.DEVNULL)
+        return {'message':'已打开此账号的独立Chrome，请完成登录'}
+
+    def tieba(self, account, payload, target):
+        from playwright.sync_api import sync_playwright
+        try:ws=endpoint(account['profile_dir'])
+        except ValueError:raise NotSubmitted('账号浏览器未连接，请先打开并登录') from None
+        with sync_playwright() as pw:
+            browser=pw.chromium.connect_over_cdp(ws,timeout=15000)
+            context=browser.contexts[0]
+            page=context.new_page()
+            try:
+                page.goto(compose_url('tieba',target) if payload else platform('tieba')['home'],wait_until='domcontentloaded',timeout=20000)
+                page.locator('.pc-main-page-layout').wait_for(state='visible',timeout=10000)
+                identity=tieba_identity(page)
+                if payload is None:return identity
+                if identity!=account['identity']:raise NotSubmitted('贴吧登录身份变化')
+                return tieba_fill_and_submit(page,payload,account['identity'],target)
+            finally:
+                # This page was created by this attempt. Close to prevent the site's
+                # own captcha retry loop from submitting after an uncertain outcome.
+                page.close()

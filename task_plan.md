@@ -100,3 +100,6 @@ Windows后台自动恢复已安装并完成双恢复实测、回归与GitHub CI�
 
 ## 2026-09-30：SAU 内容发布正式接入
 用户确认直接研发和接入。详细实施、测试和部署边界见 docs/content-publishing-plan.md。已在独立 worktree 完成开发和测试，并备份后正式部署：244 Python、30 Node、28 Chrome 交互、9 正式只读、5 实际 SAU 模拟契约检查通过；原业务数据与队列保留，watchdog healthy。功能提交 2ef41e4 已上传 GitHub，CI 36694395425 成功。
+
+## 2026-10-03：20平台社区发帖接入
+本轮独立分支实现社区发布，详细阶段与能力边界见 docs/community-publishing-plan.md。当前进行注册表、账号、草稿、队列及测试。

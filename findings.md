@@ -51,3 +51,6 @@ planning-with-files记录持续计划；brainstorming梳理架构；find-skills�
 - 发现原视频发布器点击后会在跳转超时时反复点击；JM 请求必须安装单次提交保护并检查 `/jmGuard` 握手。ContextVar 隔离请求、点击前占位、失败停止循环、600 秒协程上限；不改变原 SAU 非 JM 请求的发布策略。
 - SAU 的 category 数值是视频号分类，不是“原创声明”；已避免把它作为原创勾选项暴露给用户。
 - 部署前原 JM 记录：4 个运行、418 条采集证据、10 条发送记录、1 个 waiting 运行仍有 1 条 pending。升级仅迁移这个活动快照的程序版本；原业务执行目录逐字节核验不变。
+
+## 2026-10-03 社区发布发现
+现有SAU仅视频发布，不是论坛发帖接口；新域独立community。生产代码revision cb78db52809119f7，工作区干净。禁止将平台注册入口当成自动适配完成。HN禁止自动发帖。执行源码core/services/policies/adapters保持不变，便于离线升级旧队列revision。

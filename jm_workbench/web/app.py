@@ -24,29 +24,36 @@ from ..policies.comments import examples, target_description, ADULT_CORE
 from ..publishing.service import Publishing
 from ..publishing.api import router as publishing_router
 from ..publishing.models import MAX_UPLOAD
+from ..community.service import Community
+from ..community.api import router as community_router
 
 
-def create_app(home=None, worker=True, configuration=None, publishing_bridge=None):
+def create_app(home=None, worker=True, configuration=None, publishing_bridge=None, community_adapter=None):
     config = Config(home)
     store = Store(config.home/'jm.db')
     cfg = configuration or Configuration(config, store)
     config, store = cfg.config, cfg.store
     engine, token = Engine(cfg), secrets.token_urlsafe(32)
     publisher = Publishing(cfg, bridge=publishing_bridge)
+    community = Community(cfg, adapter=community_adapter)
 
     @asynccontextmanager
     async def lifespan(app):
         if worker:
             engine.start()
             publisher.start()
+            community.start()
         yield
+        community.close()
         publisher.close()
         engine.close()
 
     app = FastAPI(title=APP_NAME, version=__version__, lifespan=lifespan, docs_url=None, redoc_url=None)
     app.state.cfg, app.state.engine = cfg, engine
     app.state.publisher = publisher
+    app.state.community = community
     app.include_router(publishing_router(publisher))
+    app.include_router(community_router(community))
 
     @app.middleware('http')
     async def local_only(request, call_next):
@@ -67,7 +74,7 @@ def create_app(home=None, worker=True, configuration=None, publishing_bridge=Non
                     return JSONResponse({'error': '文件长度无效'}, status_code=400)
                 if length < 0 or length > MAX_UPLOAD:
                     return JSONResponse({'error': '单个视频最多150MB'}, status_code=413)
-            elif len(await request.body()) > 32768:
+            elif len(await request.body()) > (131072 if request.url.path.startswith('/api/community/') else 32768):
                 return JSONResponse({'error': '配置过大'}, status_code=413)
         response = await call_next(request)
         response.headers['X-Content-Type-Options'] = 'nosniff'
@@ -153,6 +160,7 @@ def create_app(home=None, worker=True, configuration=None, publishing_bridge=Non
     @app.post('/api/stop')
     def stop():
         store.stop()
+        community.stop_all()
         with store.connect(True) as db:
             db.execute("UPDATE publish_jobs SET state='paused',message='用户停止全部任务' WHERE state='queued'")
         return {'message': '已停止任务；进行中的请求结束后不会执行下一步'}
