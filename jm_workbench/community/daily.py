@@ -59,14 +59,18 @@ class DailyPlans:
     def save(self,payload,ident=None):
         data=payload.model_dump();now=self.s.clock()
         a=self.s.account(data['account_id'])
-        if a['platform'] not in ('tieba','juejin'):raise ValueError('每日评论计划仅支持百度贴吧和掘金')
+        if a['platform'] not in ('tieba','juejin','csdn'):raise ValueError('每日评论计划仅支持百度贴吧、掘金和CSDN')
         destination(a['platform'],data['board'])
         for r in data['replies']:thread_url(a['platform'],r['url'])
-        if a['platform']=='juejin':
-            from .juejin import validate_payload
+        if a['platform'] in ('juejin','csdn'):
+            if a['platform']=='csdn':
+                from .csdn import validate_payload
+                if data['source_boards'] or data['reply_rules']:raise ValueError('CSDN当前请使用已核对原文的指定帖评论，自动查找目标尚未验收')
+            else:
+                from .juejin import validate_payload
             for label in data['source_boards']:tag_label(label)
             for topic in data['topics']:validate_payload({**topic,'kind':'thread','category':data['board']},data['board'])
-            for reply in data['replies']+data['reply_rules']:validate_payload({**reply,'kind':'reply'},data['replies'][0]['url'] if data['replies'] else 'https://juejin.cn/post/1000000000000000000')
+            for reply in data['replies']+data['reply_rules']:validate_payload({**reply,'kind':'reply'},data['replies'][0]['url'] if data['replies'] else ('https://blog.csdn.net/fixture_author/article/details/123456789' if a['platform']=='csdn' else 'https://juejin.cn/post/1000000000000000000'))
         elif any(len(t['title'])>31 for t in data['topics']):raise ValueError('贴吧标题最多31字')
         with self.lock,self.store.connect(True) as db:
             # Account deletion and plan creation share the same write transaction.

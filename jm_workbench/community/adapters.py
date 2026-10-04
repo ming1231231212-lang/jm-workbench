@@ -227,6 +227,9 @@ class CommunityAdapter:
 
     def check(self, account, secret):
         p=account['platform']
+        if p=='csdn':
+            from .csdn import CsdnBrowser
+            return CsdnBrowser().run(account,None,'')
         if p=='juejin':
             from .juejin import JuejinBrowser
             return JuejinBrowser().run(account,None,'')
@@ -244,6 +247,9 @@ class CommunityAdapter:
 
     def discover(self,account,boards):
         """Read a bounded set of recent public threads; never click interaction buttons."""
+        if account['platform']=='csdn':
+            from .csdn import CsdnBrowser
+            return CsdnBrowser().discover(account,boards)
         if account['platform']=='juejin':
             from .juejin import JuejinBrowser
             return JuejinBrowser().discover(account,boards)
@@ -282,6 +288,9 @@ class CommunityAdapter:
 
     def publish(self, account, secret, payload, target):
         p=account['platform']
+        if p=='csdn':
+            from .csdn import CsdnBrowser
+            return CsdnBrowser().run(account,payload,target)
         if p=='juejin':
             from .juejin import JuejinBrowser
             return JuejinBrowser().run(account,payload,target)

@@ -101,3 +101,10 @@ test('Juejin account synchronization is limited to once per five minutes',async(
  let now=1000000,checks=0;const ui=new CommunityUI({clock:()=>now,request:async path=>{if(path.endsWith('/state'))return {accounts:[{id:'jj',platform:'juejin',enabled:true,version:1}]};checks++;return {status:'verified'};}});
  await ui.load();now+=30001;await ui.load();assert.equal(checks,1);now+=300000;await ui.load();assert.equal(checks,2);
 });
+
+test('CSDN plan shows its platform and supported account sync is throttled',async()=>{
+ const html=dailyPage({plans:[{id:'p',platform:'csdn',state:'paused',payload:{name:'CSDN计划',hour:10,minute:0,board:'博客',topics:[{title:'主题',body:'正文',platform_tags:['人工智能']}],replies:[],reply_rules:[]},remaining_topics:1,remaining_replies:0,message:'等待',days:[]}]});
+ assert.match(html,/CSDN · 位置：博客/);assert.ok(!html.includes('贴吧 · 板块'));assert.match(html,/标签：人工智能/);
+ let now=1000000,checks=0;const ui=new CommunityUI({clock:()=>now,request:async path=>{if(path.endsWith('/state'))return {accounts:[{id:'cs',platform:'csdn',enabled:true,version:1}]};checks++;return {status:'verified'};}});
+ await ui.load();now+=30001;await ui.load();assert.equal(checks,1);now+=300000;await ui.load();assert.equal(checks,2);
+});

@@ -6,7 +6,7 @@ _ROWS = [
     ('zhihu','知乎','国内','AI应用 互联网 职场','web','https://www.zhihu.com/','https://zhuanlan.zhihu.com/write','文章/问答','',100),
     ('tieba','百度贴吧','国内','AI 互联网 综合兴趣','browser','https://tieba.baidu.com/','https://tieba.baidu.com/','文字主题帖 / 顶层评论（正文≤2000字）','吧名，如人工智能；名称本身带“吧”字时保留',31),
     ('xiaohongshu','小红书','国内','AI工具 效率 生活','web','https://www.xiaohongshu.com/','https://creator.xiaohongshu.com/publish/publish','笔记','',20),
-    ('csdn','CSDN','国内','AI开发 编程 技术','web','https://www.csdn.net/','https://editor.csdn.net/md/','博客','',100),
+    ('csdn','CSDN','国内','AI开发 编程 技术','browser','https://www.csdn.net/','https://editor.csdn.net/md/','技术文章 / 顶层评论','文章填博客；评论填写文章HTTPS链接',100),
     ('juejin','稀土掘金','国内','AI编程 互联网 开发','browser','https://juejin.cn/','https://juejin.cn/editor/drafts/new?v=2','技术文章 / 顶层评论','文章分类，如人工智能；评论填写文章HTTPS链接',100),
     ('v2ex','V2EX','国内','互联网 AI 独立开发','web','https://www.v2ex.com/','https://www.v2ex.com/new','主题帖','节点名（可选）',120),
     ('bilibili','哔哩哔哩','国内','AI教程 科技 内容创作','web','https://www.bilibili.com/','https://t.bilibili.com/','动态/图文','',100),
@@ -46,6 +46,8 @@ def destination(platform_id, value):
         raise ValueError('请填写有效的贴吧吧名/板块')
     if platform_id == 'juejin' and value not in ('人工智能','开发工具','前端','后端','Android','iOS','代码人生','阅读'):
         raise ValueError('请选择掘金有效的文章分类')
+    if platform_id == 'csdn' and value not in ('', '博客'):
+        raise ValueError('CSDN当前发布到个人博客，请填写博客')
     if platform_id == 'reddit' and not re.fullmatch(r'[A-Za-z0-9_]{2,30}', value):
         raise ValueError('请填写有效的Reddit社区名称，不带r/')
     if platform_id == 'huggingface' and not re.fullmatch(r'(?:(?:datasets|spaces)/)?[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+', value):
@@ -63,6 +65,8 @@ def compose_url(platform_id, target=''):
         return 'https://tieba.baidu.com/f?kw='+quote(destination(platform_id,target))
     if platform_id=='juejin' and target.startswith('https://'):
         return juejin_thread_url(target)
+    if platform_id=='csdn' and target.startswith('https://'):
+        return csdn_thread_url(target)
     if platform_id=='reddit' and target:
         return 'https://www.reddit.com/r/'+destination(platform_id,target)+'/submit'
     if platform_id=='v2ex' and target:
@@ -96,9 +100,18 @@ def juejin_thread_url(value):
     return 'https://juejin.cn'+parsed.path
 
 
+def csdn_thread_url(value):
+    parsed=urlparse(value.strip())
+    if (parsed.scheme!='https' or parsed.hostname!='blog.csdn.net' or parsed.username or parsed.password or
+        parsed.port not in (None,443) or not re.fullmatch(r'/[A-Za-z0-9_-]{2,100}/article/details/[1-9][0-9]{3,23}',parsed.path)):
+        raise ValueError('请填写CSDN文章HTTPS链接，如 https://blog.csdn.net/author/article/details/123456789')
+    return 'https://blog.csdn.net'+parsed.path
+
+
 def thread_url(platform_id,value):
     if platform_id=='tieba':return tieba_thread_url(value)
     if platform_id=='juejin':return juejin_thread_url(value)
+    if platform_id=='csdn':return csdn_thread_url(value)
     raise ValueError('此平台尚未支持评论')
 
 

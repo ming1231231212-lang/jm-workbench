@@ -43,7 +43,7 @@ class Community:
               value TEXT, job_id TEXT, created REAL, PRIMARY KEY(platform,identity,scope,value));
             ''')
             # Add an index of historical writes without changing their snapshots.
-            for row in db.execute("SELECT id,platform,identity,snapshot,created FROM community_jobs WHERE platform IN ('tieba','juejin') AND state IN ('queued','running','paused','submitted','unknown','manual','recorded')").fetchall():
+            for row in db.execute("SELECT id,platform,identity,snapshot,created FROM community_jobs WHERE platform IN ('tieba','juejin','csdn') AND state IN ('queued','running','paused','submitted','unknown','manual','recorded')").fetchall():
                 snap=json.loads(row['snapshot']);payload=snap['payload']
                 keys=[('content',content_key(payload['body']))]
                 if payload.get('kind')=='reply':keys.append(('reply_target',thread_url(row['platform'],snap['destination'])))
@@ -123,8 +123,8 @@ class Community:
 
     def sync_account(self,ident):
         a=self.account(ident)
-        if a['platform'] not in ('tieba','juejin') or not a['enabled']:
-            raise ValueError('自动同步仅适用于已启用的贴吧或掘金浏览器账号')
+        if a['platform'] not in ('tieba','juejin','csdn') or not a['enabled']:
+            raise ValueError('自动同步仅适用于已启用的贴吧、掘金或CSDN浏览器账号')
         try:return {'status':'verified',**self.check_account(ident)}
         except ValueError as ex:return {'status':'pending','message':str(ex)}
 
@@ -167,11 +167,14 @@ class Community:
                     if not raw:raise ValueError('社区账号不存在')
                     a={**json.loads(raw['data']),'id':raw['id'],'version':raw['version'],'identity':raw['identity'],'checked':raw['checked']}
                     kind=payload.get('kind','thread')
-                    if kind=='reply' and a['platform'] not in ('tieba','juejin'):raise ValueError('当前仅百度贴吧、掘金支持评论发布')
+                    if kind=='reply' and a['platform'] not in ('tieba','juejin','csdn'):raise ValueError('当前仅百度贴吧、掘金、CSDN支持评论发布')
                     p=platform(a['platform']);dest=thread_url(a['platform'],t['destination']) if kind=='reply' else destination(a['platform'],t['destination'])
                     if not a['enabled']:raise ValueError(a['name']+'：账号已停用')
                     if len(payload['title'])>p['title_limit']:raise ValueError(p['name']+'标题过长')
                     if a['platform']=='tieba' and ((kind=='thread' and len(payload['title'])<5) or len(payload['body'])>2000):raise ValueError('贴吧标题需5–31字，正文最多2000字')
+                    if a['platform']=='csdn':
+                        from .csdn import validate_payload
+                        validate_payload(payload,dest)
                     if a['platform']=='juejin':
                         from .juejin import validate_payload
                         validate_payload(payload,dest)
@@ -186,7 +189,7 @@ class Community:
                     digest=hashlib.sha256(dumps([dest,payload['title'],payload['body'],payload['tags']]).encode()).hexdigest()
                     snapshot={'account':a,'payload':payload,'destination':dest,'revision':self.cfg.code_revision}
                     job_id=uid()
-                    if a['platform'] in ('tieba','juejin'):
+                    if a['platform'] in ('tieba','juejin','csdn'):
                         keys=[('content',content_key(payload['body']))]
                         if kind=='reply':keys.append(('reply_target',dest))
                         for scope,value in keys:
@@ -212,7 +215,7 @@ class Community:
             r['payload']=json.loads(r['payload']);r['jobs']=self.jobs(r['id']);posts.append(r)
         return {'platforms':list(PLATFORMS.values()),'accounts':[self.account(r['id']) for r in self.store.rows('SELECT id FROM community_accounts ORDER BY rowid')],
                 'posts':posts,'plans':self.daily.state(),'risk':self.store.rows('SELECT * FROM community_risk'),
-                'worker':bool(self.thread and self.thread.is_alive()),'limits':{'interval_seconds':1800,'per_platform_24h':5,**{p:{'per_24h':6,'threads_per_day':1,'replies_per_day':5,'timezone':'Asia/Shanghai'} for p in ('tieba','juejin')}}}
+                'worker':bool(self.thread and self.thread.is_alive()),'limits':{'interval_seconds':1800,'per_platform_24h':5,**{p:{'per_24h':6,'threads_per_day':1,'replies_per_day':5,'timezone':'Asia/Shanghai'} for p in ('tieba','juejin','csdn')}}}
 
     def control(self,ident,action):
         now=self.clock()
@@ -327,9 +330,9 @@ class Community:
             if not raw or raw['version']!=s['account']['version'] or not json.loads(raw['data'])['enabled'] or s['revision']!=self.cfg.code_revision:
                 db.execute("UPDATE community_jobs SET state='paused',message='配置或代码版本已改变，请新建草稿' WHERE id=?",(job['id'],));return
             recent=list(db.execute("SELECT CASE WHEN started>0 THEN started WHEN state='recorded' THEN updated ELSE 0 END AS started FROM community_jobs WHERE platform=? AND (CASE WHEN started>0 THEN started WHEN state='recorded' THEN updated ELSE 0 END)>? ORDER BY started DESC",(p,now-86400)))
-            limit=6 if p in ('tieba','juejin') else 5
+            limit=6 if p in ('tieba','juejin','csdn') else 5
             due=max((recent[0]['started']+1800 if recent else now),(recent[limit-1]['started']+86400 if len(recent)>=limit else now))
-            if p in ('tieba','juejin'):
+            if p in ('tieba','juejin','csdn'):
                 midnight=datetime.fromtimestamp(now,SHANGHAI).replace(hour=0,minute=0,second=0,microsecond=0)
                 today=list(db.execute("SELECT snapshot FROM community_jobs WHERE platform=? AND (started>=? OR (state='recorded' AND updated>=?))",(p,midnight.timestamp(),midnight.timestamp())))
                 kind=s['payload'].get('kind','thread')

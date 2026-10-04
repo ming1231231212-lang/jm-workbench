@@ -111,7 +111,7 @@ class ReplyMaterial(BaseModel):
     def valid_url(cls,value):
         from .registry import thread_url
         from urllib.parse import urlparse
-        return thread_url('juejin' if urlparse(value).hostname=='juejin.cn' else 'tieba',value)
+        return thread_url({'juejin.cn':'juejin','blog.csdn.net':'csdn'}.get(urlparse(value).hostname,'tieba'),value)
 
 
 class ReplyRule(BaseModel):
