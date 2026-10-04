@@ -1,16 +1,225 @@
 // Read models only. Execution and platform policy remain on the server.
-export const statusLabels={enabled:'已启用',paused:'已暂停',login:'需要连接',blocked:'平台已暂停',disabled:'账号已停用',draft:'草稿',queued:'等待执行',running:'提交中',submitted:'已提交 · 待核验',unknown:'结果不明',failed:'未提交',not_sent:'已核实未发布',cancelled:'已取消',manual:'待网页发布',recorded:'已登记 · 待核验',connected:'已登录 · 已同步',unverified:'尚未核验'};
-export const tones={enabled:'green',connected:'green',submitted:'blue',recorded:'blue',login:'amber',blocked:'red',unknown:'red',failed:'red',running:'blue',manual:'amber'};
-export const getAccount=(data,id)=>data.accounts?.find(a=>a.id===id);
-export const getPlatform=(data,id)=>data.platforms?.find(p=>p.id===id)||{id,name:id||'未知平台'};
-const describe=(key,reason='')=>({key,label:statusLabels[key]||key,tone:tones[key]||'',reason});
-export function connectionStatus(a={}){if(a.enabled===false)return describe('disabled');if(a.sync_status==='pending')return describe('login',a.sync_message||'请检查连接');if(a.identity)return describe('connected');return describe('unverified','请登录后检查连接')}
-export function planStatus(plan,data){const a=getAccount(data,plan.payload.account_id),risk=data.risk?.find(r=>r.platform===(plan.platform||a?.platform));if(risk)return describe('blocked',risk.reason);if(!a||!a.enabled)return describe('disabled','请检查关联账号');if(a.sync_status==='pending'||!a.identity)return describe('login',a.sync_message||'账号身份尚未核验');return describe(plan.state==='enabled'?'enabled':'paused',plan.message||'')}
-export function planProgress(plan,day){const d=plan.days?.find(d=>d.day===day);return {thread:{submitted:0,waiting:0,failed:0,...d?.counts?.thread},reply:{submitted:0,waiting:0,failed:0,...d?.counts?.reply},message:d?.message||'今天尚未安排',state:d?.state||''}}
-export function postStatus(post){const jobs=post.jobs||[];if(!jobs.length)return describe(post.state||'draft');for(const key of ['unknown','running','failed','queued','paused','manual','recorded','submitted','not_sent','cancelled'])if(jobs.some(j=>j.state===key))return describe(key);return describe(post.state||'draft')}
-export function postAccounts(post,data){const ids=[...new Set((post.payload.targets||[]).map(t=>t.account_id).concat((post.jobs||[]).map(j=>j.account_id)))];return ids.map(id=>getAccount(data,id)||{id,name:(post.jobs||[]).find(j=>j.account_id===id)?.account_name||'历史账号',platform:(post.jobs||[]).find(j=>j.account_id===id)?.platform})}
-export function filterPosts(data,f={}){const {q='',platform='',status='',kind='',plan=''}=f;return (data.posts||[]).filter(p=>{const a=postAccounts(p,data),v=p.payload;return (!kind||kind==='all'||(v.kind||'thread')===kind)&&(!plan||p.plan_id===plan)&&(!platform||a.some(a=>a.platform===platform))&&(!status||status==='all'||postStatus(p).key===status||p.jobs?.some(j=>j.state===status))&&(!q||[v.title,v.body,v.source_title,v.source_excerpt,...(v.targets||[]).map(t=>t.destination),...a.map(a=>a.name)].join(' ').toLowerCase().includes(q.toLowerCase()))})}
-export function filterPlans(data,f={}){return (data.plans||[]).filter(p=>{const a=getAccount(data,p.payload.account_id),s=planStatus(p,data);return (!f.platform||(p.platform||a?.platform)===f.platform)&&(!f.status||s.key===f.status||f.status==='attention'&&['blocked','login','disabled'].includes(s.key))&&(!f.q||[p.payload.name,p.payload.board,a?.name,getPlatform(data,p.platform||a?.platform).name].join(' ').toLowerCase().includes(f.q.toLowerCase()))})}
-export function csvExport(posts,data){const cell=value=>{let s=String(value??'');if(/^\s*[=+@\-]/.test(s)||/^[\t\r]/.test(s))s="'"+s;return '"'+s.replaceAll('"','""')+'"'};const rows=[['记录ID','类型','标题','原帖标题','正文','目标','账号','状态','回执','结果说明'],...posts.map(p=>[p.id,p.payload.kind==='reply'?'评论':'帖子',p.payload.title,p.payload.source_title||'',p.payload.body,(p.payload.targets||[]).map(t=>t.destination).join('\n'),postAccounts(p,data).map(a=>a.name).join('；'),postStatus(p).label,(p.jobs||[]).map(j=>j.receipt?.url||'').join('\n'),(p.jobs||[]).map(j=>j.message||'').join('\n')])];return '\ufeff'+rows.map(r=>r.map(cell).join(',')).join('\r\n')}
-export function localDay(now=Date.now()){return new Intl.DateTimeFormat('sv-SE',{timeZone:'Asia/Shanghai',year:'numeric',month:'2-digit',day:'2-digit'}).format(now)}
-export function safeLink(value){try{const u=new URL(value);return u.protocol==='https:'&&!u.username&&!u.password?u.href:''}catch{return ''}}
+export const statusLabels = {
+  enabled: "已启用",
+  paused: "已暂停",
+  login: "需要连接",
+  blocked: "平台已暂停",
+  disabled: "账号已停用",
+  draft: "草稿",
+  queued: "等待执行",
+  running: "提交中",
+  submitted: "已提交 · 待核验",
+  unknown: "结果不明",
+  failed: "未提交",
+  not_sent: "已核实未发布",
+  cancelled: "已取消",
+  manual: "待网页发布",
+  recorded: "已登记 · 待核验",
+  connected: "已登录 · 已同步",
+  unverified: "尚未核验",
+};
+export const tones = {
+  enabled: "green",
+  connected: "green",
+  submitted: "blue",
+  recorded: "blue",
+  login: "amber",
+  blocked: "red",
+  unknown: "red",
+  failed: "red",
+  running: "blue",
+  manual: "amber",
+};
+export const getAccount = (data, id) => data.accounts?.find((a) => a.id === id);
+export const getPlatform = (data, id) =>
+  data.platforms?.find((p) => p.id === id) || { id, name: id || "未知平台" };
+const describe = (key, reason = "") => ({
+  key,
+  label: statusLabels[key] || key,
+  tone: tones[key] || "",
+  reason,
+});
+export function connectionStatus(a = {}) {
+  if (a.enabled === false) return describe("disabled");
+  if (a.sync_status === "pending")
+    return describe("login", a.sync_message || "请检查连接");
+  if (a.identity) return describe("connected");
+  return describe("unverified", "请登录后检查连接");
+}
+export function planStatus(plan, data) {
+  const a = getAccount(data, plan.payload.account_id),
+    risk = data.risk?.find(
+      (r) => r.platform === (plan.platform || a?.platform),
+    );
+  if (risk) return describe("blocked", risk.reason);
+  if (!a || !a.enabled) return describe("disabled", "请检查关联账号");
+  if (a.sync_status === "pending" || !a.identity)
+    return describe("login", a.sync_message || "账号身份尚未核验");
+  return describe(
+    plan.state === "enabled" ? "enabled" : "paused",
+    plan.message || "",
+  );
+}
+export function planProgress(plan, day) {
+  const d = plan.days?.find((d) => d.day === day);
+  return {
+    thread: { submitted: 0, waiting: 0, failed: 0, ...d?.counts?.thread },
+    reply: { submitted: 0, waiting: 0, failed: 0, ...d?.counts?.reply },
+    message: d?.message || "今天尚未安排",
+    state: d?.state || "",
+  };
+}
+export function postStatus(post) {
+  const jobs = post.jobs || [];
+  if (!jobs.length) return describe(post.state || "draft");
+  for (const key of [
+    "unknown",
+    "running",
+    "failed",
+    "queued",
+    "paused",
+    "manual",
+    "recorded",
+    "submitted",
+    "not_sent",
+    "cancelled",
+  ])
+    if (jobs.some((j) => j.state === key)) return describe(key);
+  return describe(post.state || "draft");
+}
+export function postAccounts(post, data) {
+  const ids = [
+    ...new Set(
+      (post.payload.targets || [])
+        .map((t) => t.account_id)
+        .concat((post.jobs || []).map((j) => j.account_id)),
+    ),
+  ];
+  return ids.map(
+    (id) =>
+      getAccount(data, id) || {
+        id,
+        name:
+          (post.jobs || []).find((j) => j.account_id === id)?.account_name ||
+          "历史账号",
+        platform: (post.jobs || []).find((j) => j.account_id === id)?.platform,
+      },
+  );
+}
+export function filterPosts(data, f = {}) {
+  const {
+    q = "",
+    platform = "",
+    status = "",
+    kind = "",
+    plan = "",
+    day = "",
+  } = f;
+  return (data.posts || []).filter((p) => {
+    const a = postAccounts(p, data),
+      v = p.payload;
+    return (
+      (!kind || kind === "all" || (v.kind || "thread") === kind) &&
+      (!plan || p.plan_id === plan) &&
+      (!platform || a.some((a) => a.platform === platform)) &&
+      (!status ||
+        status === "all" ||
+        postStatus(p).key === status ||
+        p.jobs?.some((j) => j.state === status)) &&
+      (!day ||
+        p.jobs?.some(
+          (j) =>
+            (!status || j.state === status) &&
+            j.started &&
+            localDay(j.started * 1000) === day,
+        )) &&
+      (!q ||
+        [
+          v.title,
+          v.body,
+          v.source_title,
+          v.source_excerpt,
+          ...(v.targets || []).map((t) => t.destination),
+          ...a.map((a) => a.name),
+        ]
+          .join(" ")
+          .toLowerCase()
+          .includes(q.toLowerCase()))
+    );
+  });
+}
+export function filterPlans(data, f = {}) {
+  return (data.plans || []).filter((p) => {
+    const a = getAccount(data, p.payload.account_id),
+      s = planStatus(p, data);
+    return (
+      (!f.platform || (p.platform || a?.platform) === f.platform) &&
+      (!f.status ||
+        s.key === f.status ||
+        (f.status === "attention" &&
+          ["blocked", "login", "disabled"].includes(s.key))) &&
+      (!f.q ||
+        [
+          p.payload.name,
+          p.payload.board,
+          a?.name,
+          getPlatform(data, p.platform || a?.platform).name,
+        ]
+          .join(" ")
+          .toLowerCase()
+          .includes(f.q.toLowerCase()))
+    );
+  });
+}
+export function csvExport(posts, data) {
+  const cell = (value) => {
+    let s = String(value ?? "");
+    if (/^\s*[=+@\-]/.test(s) || /^[\t\r]/.test(s)) s = "'" + s;
+    return '"' + s.replaceAll('"', '""') + '"';
+  };
+  const rows = [
+    [
+      "记录ID",
+      "类型",
+      "标题",
+      "原帖标题",
+      "正文",
+      "目标",
+      "账号",
+      "状态",
+      "回执",
+      "结果说明",
+    ],
+    ...posts.map((p) => [
+      p.id,
+      p.payload.kind === "reply" ? "评论" : "帖子",
+      p.payload.title,
+      p.payload.source_title || "",
+      p.payload.body,
+      (p.payload.targets || []).map((t) => t.destination).join("\n"),
+      postAccounts(p, data)
+        .map((a) => a.name)
+        .join("；"),
+      postStatus(p).label,
+      (p.jobs || []).map((j) => j.receipt?.url || "").join("\n"),
+      (p.jobs || []).map((j) => j.message || "").join("\n"),
+    ]),
+  ];
+  return "\ufeff" + rows.map((r) => r.map(cell).join(",")).join("\r\n");
+}
+export function localDay(now = Date.now()) {
+  return new Intl.DateTimeFormat("sv-SE", {
+    timeZone: "Asia/Shanghai",
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+  }).format(now);
+}
+export function safeLink(value) {
+  try {
+    const u = new URL(value);
+    return u.protocol === "https:" && !u.username && !u.password ? u.href : "";
+  } catch {
+    return "";
+  }
+}

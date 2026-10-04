@@ -8,6 +8,7 @@
     <link rel="stylesheet" href="/static/data-page.css" />
     <link rel="stylesheet" href="/static/workbench.css" />
     <link rel="stylesheet" href="/static/community.css" />
+    <link rel="stylesheet" href="/static/community-v2.css" />
   </head>
   <body>
     <div class="shell">
@@ -28,10 +29,24 @@
       <main>
         <header class="topbar">
           <div class="breadcrumb">
-            我的工作空间 <span>/</span>
+            <button
+              class="icon-button community-mobile-menu"
+              data-action="com-v2-menu"
+              aria-label="打开导航"
+              aria-expanded="false"
+            >
+              ☰
+            </button>
+            <span class="breadcrumb-prefix">我的工作空间 /</span>
             <strong id="page-label">工作概览</strong>
           </div>
           <div class="top-actions">
+            <button
+              class="button quiet community-density"
+              data-action="com-v2-density"
+            >
+              紧凑 / 舒适
+            </button>
             <button class="button quiet" data-action="refresh" title="刷新数据">
               ↻ 刷新</button
             ><button class="button" data-action="stop">Ⅱ 停止全部</button
@@ -43,11 +58,10 @@
         <div class="content" id="content">
           <div class="empty">正在连接JM工作台…</div>
         </div>
-        <footer>
-          JM工作台 <span>任务、数据、内容发布，一处管理</span>
-        </footer>
+        <footer>JM工作台 <span>任务、数据、内容发布，一处管理</span></footer>
       </main>
     </div>
+    <div class="community-menu-shade" data-action="com-v2-menu"></div>
     <div id="toast" role="status" aria-live="polite" hidden></div>
     <dialog id="dialog" aria-labelledby="dialog-title">
       <div id="dialog-content"></div>

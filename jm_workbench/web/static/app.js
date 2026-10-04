@@ -1,6 +1,7 @@
 import * as views from "./views.js";
 import { escape as e } from "./ui.js";
-import { CommunityUI, communityPage } from "./community.js";
+import { CommunityWorkspace } from "./community-v2.js";
+import { icon as communityIcon } from "./community-icons.js";
 import {
   PublishingUI,
   publishingPage,
@@ -32,12 +33,35 @@ const publishing = new PublishingUI({
   showForm,
   dialog,
 });
-const community = new CommunityUI({request, toast, render, showForm, dialog});
+const community = new CommunityWorkspace({
+  request,
+  toast,
+  render,
+  showForm,
+  dialog,
+});
 function toast(text, error = false) {
   const box = document.querySelector("#toast");
   box.textContent = text;
   box.className = error ? "error" : "";
   box.hidden = false;
+  document
+    .querySelectorAll(".community-operation-error")
+    .forEach((el) => el.remove());
+  if (error && page === "community") {
+    const open =
+      document.querySelector("#dialog[open] #dialog-content") ||
+      document.querySelector("#community-drawer[open] .drawer-body");
+    if (open) {
+      const message = document.createElement("div");
+      message.className = "form-error community-operation-error";
+      message.setAttribute("role", "alert");
+      message.tabIndex = -1;
+      message.textContent = text;
+      open.prepend(message);
+      message.focus();
+    }
+  }
   clearTimeout(toastTimer);
   toastTimer = setTimeout(() => (box.hidden = true), 8000);
 }
@@ -68,6 +92,8 @@ async function render() {
   if (!views.pages.some((p) => p[0] === page)) page = "tasks";
   const route = views.pages.find((p) => p[0] === page),
     activePage = route[3] || page;
+  if (page === "community") community.activate();
+  else community.deactivate();
   document.querySelector("#page-label").textContent = views.pages.find(
     (p) => p[0] === page,
   )[2];
@@ -75,15 +101,20 @@ async function render() {
     .filter((p) => !p[3])
     .map(
       ([id, icon, title]) =>
-        `<a href="#${id}" class="${id === activePage ? "active" : ""}" ${id === activePage ? 'aria-current="page"' : ""}><span>${icon}</span>${title}</a>`,
+        `<a href="#${id}" class="${id === activePage ? "active" : ""}" ${id === activePage ? 'aria-current="page"' : ""}><span>${page === "community" ? communityIcon({ tasks: "list-checks", publishing: "video", community: "messages-square", data: "chart-no-axes-combined", accounts: "users-round", settings: "settings-2" }[id]) : icon}</span>${title}</a>`,
     )
     .join("");
   document.querySelector("#version").textContent =
     "v" + state.version + " · " + state.revision.slice(0, 8);
   document.querySelector('[data-action="launch"]').hidden =
     activePage !== "tasks";
+  document.querySelector('[data-action="stop"]').hidden = page === "community";
   if (page === "community") {
-    content.innerHTML = communityPage(await community.load(), community.tab, community.region, community.query);
+    await community.load();
+    // A slow account check must not overwrite a view the user has left.
+    if ((location.hash.slice(1) || "tasks") !== "community") return;
+    content.innerHTML = community.page();
+    if (community.filters.drawer) community.draw();
   } else if (page === "publishing") {
     const data = await publishing.load();
     content.innerHTML = publishingPage(data, publishing.tab, publishing.filter);
@@ -124,7 +155,7 @@ async function refresh(show = false) {
 function showForm(html) {
   document.querySelector("#dialog-content").innerHTML = html;
   syncCommentFields(document.querySelector("#task-form"));
-  dialog.showModal();
+  if (!dialog.open) dialog.showModal();
 }
 async function action(name, id) {
   if (name === "close-dialog") return dialog.close();
@@ -223,6 +254,18 @@ document.addEventListener("click", async (event) => {
 });
 document.addEventListener("change", async (event) => {
   const el = event.target;
+  if (
+    el.matches("[data-com-filter],[data-com-select]") ||
+    el.form?.id === "com-v2-wizard"
+  ) {
+    if (el.dataset.comFilter === "q") return;
+    try {
+      community.change(el);
+    } catch (ex) {
+      toast(ex.message, true);
+    }
+    return;
+  }
   if (el.matches("[data-pub-upload]")) {
     if (busy) return;
     setBusy(true);
@@ -286,13 +329,21 @@ document.addEventListener("change", async (event) => {
     syncCommentFields(el.form);
 });
 document.addEventListener("input", (event) => {
+  if (event.target.matches('[data-com-filter="q"]')) {
+    community.change(event.target);
+    return;
+  }
   if (event.target.form?.id === "task-form")
     event.target.form
       .querySelector("#comment-preview-result")
       .replaceChildren();
 });
-document.addEventListener('change', event => {
-  if(event.target.form?.id==='com-account-form' && event.target.name==='platform') community.syncAccount(event.target.form);
+document.addEventListener("change", (event) => {
+  if (
+    event.target.form?.id === "com-account-form" &&
+    event.target.name === "platform"
+  )
+    community.syncAccount(event.target.form);
 });
 document.addEventListener("submit", async (event) => {
   const form = event.target;
@@ -312,7 +363,7 @@ document.addEventListener("submit", async (event) => {
   const data = Object.fromEntries(new FormData(form)),
     id = form.dataset.id;
   try {
-    if (form.id.startsWith('com-')) {
+    if (form.id.startsWith("com-")) {
       await community.submit(form, event.submitter);
       return;
     }
@@ -353,8 +404,33 @@ document.addEventListener("submit", async (event) => {
 window.addEventListener("hashchange", () => {
   if (state) render().catch((ex) => toast(ex.message, true));
 });
+document.addEventListener("keydown", (event) => {
+  if (page !== "community") return;
+  if (
+    event.key === "/" &&
+    !dialog.open &&
+    !document.querySelector("#community-drawer")?.open &&
+    !["INPUT", "TEXTAREA", "SELECT"].includes(event.target.tagName) &&
+    !event.target.isContentEditable
+  ) {
+    event.preventDefault();
+    document.querySelector("#community-search")?.focus();
+  }
+  if (event.key === "Escape") {
+    document.body.classList.remove("community-menu-open");
+    document
+      .querySelector(".community-mobile-menu")
+      ?.setAttribute("aria-expanded", "false");
+  }
+});
 function syncCommunityOnReturn() {
-  if (page === "community" && !busy && !dialog.open && document.visibilityState === "visible")
+  if (
+    page === "community" &&
+    !busy &&
+    !dialog.open &&
+    !document.querySelector("#community-drawer")?.open &&
+    document.visibilityState === "visible"
+  )
     refresh().catch(() => {});
 }
 window.addEventListener("focus", syncCommunityOnReturn);
@@ -366,11 +442,19 @@ setInterval(() => {
   if (
     !busy &&
     !dialog.open &&
+    !document.querySelector("#community-drawer")?.open &&
     document.visibilityState === "visible" &&
     !["INPUT", "TEXTAREA", "SELECT"].includes(
       document.activeElement?.tagName,
     ) &&
-    ["tasks", "publishing", "community", "overview", "runs", "platforms"].includes(page)
+    [
+      "tasks",
+      "publishing",
+      "community",
+      "overview",
+      "runs",
+      "platforms",
+    ].includes(page)
   )
     refresh().catch(() => {});
 }, 10000);
