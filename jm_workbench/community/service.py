@@ -211,10 +211,24 @@ class Community:
 
     def state(self):
         posts=[]
-        for r in self.store.rows('SELECT * FROM community_posts ORDER BY created DESC,rowid DESC LIMIT 200'):
+        for r in self.store.rows('''SELECT p.*,i.plan_id,i.day AS plan_day FROM community_posts p
+                LEFT JOIN community_plan_items i ON i.post_id=p.id
+                ORDER BY p.created DESC,p.rowid DESC LIMIT 200'''):
             r['payload']=json.loads(r['payload']);r['jobs']=self.jobs(r['id']);posts.append(r)
+        now=self.clock();local=datetime.fromtimestamp(now,SHANGHAI)
+        midnight=local.replace(hour=0,minute=0,second=0,microsecond=0).timestamp()
+        totals=self.store.rows('''SELECT COALESCE(json_extract(snapshot,'$.payload.kind'),'thread') AS kind,state,COUNT(*) AS n
+            FROM community_jobs WHERE (state='submitted' AND started>=? AND started<?)
+              OR (state='recorded' AND updated>=? AND updated<?) GROUP BY kind,state''',
+            (midnight,midnight+86400,midnight,midnight+86400))
+        summary={'day':local.date().isoformat(),'thread_submitted':0,'reply_submitted':0,'recorded':0}
+        for row in totals:
+            key='recorded' if row['state']=='recorded' else row['kind']+'_submitted'
+            if key in summary:summary[key]+=row['n']
         return {'platforms':list(PLATFORMS.values()),'accounts':[self.account(r['id']) for r in self.store.rows('SELECT id FROM community_accounts ORDER BY rowid')],
                 'posts':posts,'plans':self.daily.state(),'risk':self.store.rows('SELECT * FROM community_risk'),
+                'summary':summary,'post_total':self.store.rows('SELECT COUNT(*) AS n FROM community_posts')[0]['n'],
+                'post_limit':200,'server_time':now,
                 'worker':bool(self.thread and self.thread.is_alive()),'limits':{'interval_seconds':1800,'per_platform_24h':5,**{p:{'per_24h':6,'threads_per_day':1,'replies_per_day':5,'timezone':'Asia/Shanghai'} for p in ('tieba','juejin','csdn')}}}
 
     def control(self,ident,action):
