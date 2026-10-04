@@ -195,6 +195,6 @@ Next Step：等待用户完成Reddit真人验证和登录，再核对r/SideProje
 1. 审计六个主模块、四个二级路由及功能清单 — complete。
 2. 共用样式、导航、表单反馈与各模块视觉统一 — complete。
 3. 全量回归、隔离浏览器功能检查及视觉修复 — complete：392 Python、62 Node、144浏览器检查，真实发送0。
-4. 备份部署、生产检查与GitHub — in_progress。
+4. 备份部署与生产检查 — complete：20张业务表及运行配置一致，15项生产只读检查通过；守护healthy。发现并恢复SAU依赖服务，3个原发布账号可读。GitHub推送及CI回执保存于outputs/unified-ui-20261004。
 
-Next Step：备份部署后核验真实页面、业务表一致性、服务守护与GitHub。
+Next Step：本輪功能与正式运行检查完成，后续模块迭代沿用workspace共用样式和三组浏览器验收。
