@@ -101,6 +101,24 @@ def receipt(data, kind, target, expected):
     return result
 
 
+def response_receipt(response, kind, target, expected):
+    """Keep an actionable failure reason without recording headers or response data."""
+    try:
+        data = response.json()
+    except Exception:
+        data = None
+    if response.status in (400, 401, 403, 422, 429):
+        detail = (data.get('message') or data.get('msg')) if isinstance(data, dict) else None
+        if not isinstance(detail, str) or '<' in detail:
+            detail = '平台未返回可读原因，请到创作中心核实'
+        detail = re.sub(r'https?://\S+', '[链接]', detail)
+        detail = re.sub(r'(?i)(token|cookie|authorization|password)\s*[:=]\s*\S+', r'\1=[已隐藏]', detail)
+        raise NotSubmitted(f'CSDN拒绝提交（HTTP {response.status}）：' + detail[:180])
+    if not 200 <= response.status < 300:
+        raise RuntimeError(f'CSDN提交结果不明（HTTP {response.status}），禁止重发')
+    return receipt(data, kind, target, expected)
+
+
 class SubmitGuard:
     def __init__(self, payload, target):
         self.payload, self.target = payload, target
@@ -265,9 +283,7 @@ class CsdnBrowser:
                 response = waiting.value
                 if guard.count != 1 or guard.blocked:
                     raise RuntimeError('CSDN请求核对失败，禁止重发')
-                if response.status in (400, 401, 403, 422, 429):
-                    raise NotSubmitted('CSDN拒绝提交，已暂停此平台')
-                return receipt(response.json(), kind, target, actual)
+                return response_receipt(response, kind, target, actual)
             finally:
                 if page is not None:
                     page.close()

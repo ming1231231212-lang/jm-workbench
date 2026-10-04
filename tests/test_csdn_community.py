@@ -7,7 +7,7 @@ from jm_workbench.web.app import create_app
 from jm_workbench.community.models import CommunityAccount, CommunityPost, DailyPlan
 from jm_workbench.community.service import SHANGHAI
 from jm_workbench.community.registry import csdn_thread_url, compose_url
-from jm_workbench.community.csdn import SubmitGuard, receipt, validate_payload
+from jm_workbench.community.csdn import SubmitGuard, receipt, response_receipt, validate_payload
 from jm_workbench.community.adapters import NotSubmitted
 
 URL = 'https://blog.csdn.net/source_author/article/details/123456789'
@@ -109,6 +109,29 @@ class Route:
     def __init__(self,raw):self.request=type('Req',(),{'method':'POST','post_data':raw})();self.result=''
     def fallback(self):self.result='sent'
     def abort(self,*args):self.result='blocked'
+
+
+@pytest.mark.parametrize('status',[400,401,403,422,429])
+def test_native_http_rejection_keeps_status_and_reason(status):
+    response=type('Response',(),{'status':status,'json':lambda self:{'message':'请先完成账号验证'}})()
+    with pytest.raises(NotSubmitted,match=f'HTTP {status}.*请先完成账号验证'):
+        response_receipt(response,'thread','博客','test_author')
+
+
+def test_response_diagnostics_do_not_leak_data_or_treat_gateway_errors_as_rejected():
+    response=type('Response',(),{'status':403,'json':lambda self:{'message':'token=secret https://example.com/?secret=yes','data':{'cookie':'private'}}})()
+    with pytest.raises(NotSubmitted) as caught:response_receipt(response,'thread','博客','test_author')
+    assert 'secret' not in str(caught.value) and 'private' not in str(caught.value)
+    response.status=502
+    with pytest.raises(RuntimeError,match='结果不明.*502'):response_receipt(response,'thread','博客','test_author')
+    response.status=200;response.json=lambda:{'code':200,'data':12345678}
+    assert response_receipt(response,'reply',URL,'test_author')['comment_id']=='12345678'
+
+
+def test_unreadable_http_rejection_is_not_a_success():
+    response=type('Response',(),{'status':403,'json':lambda self:(_ for _ in ()).throw(ValueError('HTML'))})()
+    with pytest.raises(NotSubmitted,match='HTTP 403.*未返回可读原因'):
+        response_receipt(response,'thread','博客','test_author')
 
 
 def test_comment_guard_exact_native_form_prearm_duplicate_and_reply_target():
