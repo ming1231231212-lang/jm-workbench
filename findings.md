@@ -54,3 +54,10 @@ planning-with-files记录持续计划；brainstorming梳理架构；find-skills�
 
 ## 2026-10-03 社区发布发现
 现有SAU仅视频发布，不是论坛发帖接口；新域独立community。生产代码revision cb78db52809119f7，工作区干净。禁止将平台注册入口当成自动适配完成。HN禁止自动发帖。执行源码core/services/policies/adapters保持不变，便于离线升级旧队列revision。
+
+## 2026-10-04 国外替代社区
+
+- DEV官方AI内容规则：https://dev.to/guidelines-for-ai-assisted-articles-on-dev/ ，禁止AI生成评论，也限制AI辅助文章用于推广自身业务；不适用于本次由助手生成推广和评论的流程。
+- Reddit官方反垃圾内容规则：https://support.reddithelp.com/hc/en-us/articles/360043504051-Spam ，禁止重复或不请自来的大规模互动，明确列举持续推广产品的机器人。1+5不能当作平台许可或安全额度，需核对具体社区与账号权限。
+- 2026-10-04原生Chrome访问Reddit显示Prove your humanity；需要用户本人处理，不能自动绕过。r/SideProject具体规则尚未完整核验。
+- 现有Reddit适配器通过OAuth令牌调用发帖API；浏览器登录不会自动提供已授权令牌，评论与每日计划尚未接入，不能报为自动可用。
