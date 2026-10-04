@@ -1,5 +1,6 @@
 """Approved community UI acceptance. Isolated DB, fake adapter, no production writes."""
 import json
+import re
 import socket
 import threading
 import time
@@ -62,8 +63,10 @@ def main():
             page.locator(locator).first.click()
             expect(page.locator('body')).to_have_attribute('aria-busy','false')
         def close():
+            expect(page.locator('body')).not_to_have_attribute('aria-busy','true')
             if page.locator('#dialog').evaluate('el=>el.open'):click('close-dialog')
             if page.locator('#community-drawer').evaluate('el=>el.open'):click('com-v2-close')
+            expect(page.locator('#community-drawer')).not_to_be_visible()
         def tab(name):close();click('com-tab',name)
         def snap(name):
             page.locator('#toast').evaluate('el=>el.hidden=true')
@@ -137,7 +140,7 @@ def main():
             context.unroute('**/api/community/plans/*/enable')
             page.locator('#com-v2-wizard button[value="save"]').click();expect(page.locator('#dialog')).not_to_be_visible()
             check('retry saves same plan instead of duplicating',len(s.state()['plans'])==before+1);close()
-            click('com-v2-density');page.reload();expect(page.locator('body')).to_have_class('community-v2 community-dense');check('density survives reload without storing business data')
+            click('com-v2-density');page.reload();expect(page.locator('body')).to_have_class(re.compile(r'community-dense'));check('density survives reload without storing business data')
             for width,height in [(1440,1000),(1024,800),(390,844)]:
                 page.set_viewport_size({'width':width,'height':height})
                 for name in ['plans','content','accounts']:
@@ -145,12 +148,12 @@ def main():
                     assert page.evaluate('document.documentElement.scrollWidth<=innerWidth'),f'{width} {name} page overflow'
                     assert page.locator('#community-view .table-wrap').evaluate_all('els=>els.every(el=>el.scrollWidth<=el.clientWidth+1)'),f'{width} {name} table overflow'
                 check(f'{width}px layouts without page or table overflow')
-            tab('plans');snap('plans-mobile');click('com-v2-menu');expect(page.locator('body')).to_have_class('community-v2 community-dense community-menu-open');page.keyboard.press('Escape');check('mobile navigation opens and Escape closes')
+            tab('plans');snap('plans-mobile');click('com-v2-menu');expect(page.locator('body')).to_have_class(re.compile(r'community-menu-open'));page.keyboard.press('Escape');check('mobile navigation opens and Escape closes')
             click('com-plan-new');wizard_next();snap('wizard-mobile');check('mobile wizard fits viewport',page.locator('#dialog').bounding_box()['width']<=390);click('close-dialog')
             page.set_viewport_size({'width':1440,'height':1000})
             for route_name in ['tasks','publishing','data','accounts','settings','community']:
-                page.goto(f'http://127.0.0.1:{port}/#{route_name}');expect(page.locator('#content h1')).to_be_visible();expect(page.locator('body')).to_have_class('community-v2 community-dense' if route_name=='community' else '')
-            check('other five modules remain reachable with original styling')
+                page.goto(f'http://127.0.0.1:{port}/#{route_name}');expect(page.locator('#content h1')).to_be_visible();expect(page.locator('body')).to_have_class(re.compile(r'jm-workspace'))
+            check('other five modules remain reachable with the shared visual system')
             check('no browser exceptions',not errors);check('no external requests',not external)
         except Exception:
             errors.append(traceback.format_exc());snap('failure');raise

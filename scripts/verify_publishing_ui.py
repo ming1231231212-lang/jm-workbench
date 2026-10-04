@@ -47,7 +47,7 @@ def main():
         checks.append(label)
     with sync_playwright() as pw:
         browser=pw.chromium.connect_over_cdp(endpoint(Path(r'D:\Codex\个人工作台\项目\Codex-Chrome\User Data')),timeout=30000)
-        context=browser.contexts[0];original=list(context.pages)
+        context=browser.new_context(accept_downloads=True)
         page=context.new_page();page.set_viewport_size({'width':1440,'height':1000});page.set_default_timeout(12000)
         page.on('pageerror',lambda error:errors.append(str(error)))
         def nav(route):
@@ -141,8 +141,7 @@ def main():
             print(json.dumps({'output':str(output),'completed':checks,'errors':errors},ensure_ascii=False))
             raise
         finally:
-            page.close()
-            assert all(p in context.pages for p in original),'Original tabs must be preserved'
+            context.close()
             server.should_exit=True;thread.join(5);sock.close()
 
 
