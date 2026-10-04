@@ -183,7 +183,7 @@ Next Step：等待用户完成Reddit真人验证和登录，再核对r/SideProje
 
 1. 在独立worktree整理状态与数据契约 — complete；只读元数据，旧接口兼容。
 2. 发布计划 / 内容记录 / 平台账号三视图、详情抽屉、三步配置与原有操作连接 — complete。
-3. 回归与隔离Chrome验收 — complete（392 Python、55 Node、36 Chrome；0外部请求，0脚本异常）。
+3. 回归与隔离Chrome验收 — complete（392 Python、57 Node、36 Chrome；0外部请求，0脚本异常）。补充首屏非阻塞同步及过期响应保护。
 4. 备份部署、业务数据逐表核对、服务守护、生产只读验收与GitHub同步 — in_progress。
 
 设计和代码职责见docs/community-ui-v2.md。继续保留真实平台暂停与原有记录，不恢复Reddit测试或发送测试内容。

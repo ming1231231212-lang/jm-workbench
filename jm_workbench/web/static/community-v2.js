@@ -31,6 +31,65 @@ export class CommunityWorkspace extends CommunityUI {
     this.render = async () => this.repaint();
     this.wizard = null;
     this.returnFocus = null;
+    this.backgroundChecks = new Map();
+  }
+  async loadAndSync() {
+    // Render persisted records first; slow identity checks must not hide the workspace.
+    const data = await this.request("/api/community/state");
+    this.data = data;
+    for (const account of data.accounts) {
+      if (
+        !account.enabled ||
+        !["tieba", "juejin", "csdn"].includes(account.platform)
+      )
+        continue;
+      const cached = this.syncChecks.get(account.id);
+      if (cached?.version === account.version) {
+        account.sync_status = cached.status;
+        account.sync_message = cached.message;
+      }
+      const interval = account.platform === "tieba" ? 30000 : 300000;
+      if (
+        !this.backgroundChecks.has(account.id) &&
+        (!cached ||
+          cached.version !== account.version ||
+          this.clock() - cached.at >= interval)
+      )
+        this.startBackgroundCheck(account);
+    }
+    return data;
+  }
+  startBackgroundCheck(account) {
+    const check = { at: this.clock(), version: account.version };
+    this.syncChecks.set(account.id, check);
+    const pending = this.request(
+      `/api/community/accounts/${account.id}/sync`,
+      {},
+    )
+      .catch(() => ({
+        status: "pending",
+        message: "同步未完成，可点击“检查连接”重试",
+      }))
+      .then((result) => {
+        // A newer manual check, account edit or removal wins over a delayed response.
+        if (this.syncChecks.get(account.id) !== check) return;
+        const current = this.data?.accounts.find((a) => a.id === account.id);
+        if (!current || current.version !== check.version) return;
+        Object.assign(check, {
+          status: result.status,
+          message: result.message,
+        });
+        if (result.account) Object.assign(current, result.account);
+        current.sync_status = check.status;
+        current.sync_message = check.message;
+        if (
+          typeof document !== "undefined" &&
+          !document.querySelector("#dialog[open]")
+        )
+          this.repaint();
+      })
+      .finally(() => this.backgroundChecks.delete(account.id));
+    this.backgroundChecks.set(account.id, pending);
   }
   page() {
     this.filters.tab = this.tab;

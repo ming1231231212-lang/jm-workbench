@@ -1,5 +1,50 @@
 import test from "node:test";
 import assert from "node:assert/strict";
+import { CommunityWorkspace } from "../jm_workbench/web/static/community-v2.js";
+
+test("slow browser checks cannot delay records or duplicate on refresh", async () => {
+  let resolveCheck,
+    checks = 0;
+  const ui = new CommunityWorkspace({
+    request: async (path) => {
+      if (path.endsWith("/state"))
+        return {
+          accounts: [{ id: "a", platform: "tieba", enabled: true, version: 1 }],
+          posts: [],
+        };
+      checks++;
+      return new Promise((resolve) => (resolveCheck = resolve));
+    },
+  });
+  const loaded = await ui.load();
+  assert.equal(loaded.accounts.length, 1);
+  await ui.load();
+  assert.equal(checks, 1);
+  const pending = ui.backgroundChecks.get("a");
+  resolveCheck({ status: "pending", message: "等待登录" });
+  await pending;
+  assert.equal(ui.data.accounts[0].sync_status, "pending");
+});
+test("late sync cannot replace a newer manual account check", async () => {
+  let resolveCheck;
+  const ui = new CommunityWorkspace({
+    request: async (path) =>
+      path.endsWith("/state")
+        ? {
+            accounts: [
+              { id: "a", platform: "tieba", enabled: true, version: 1 },
+            ],
+          }
+        : new Promise((resolve) => (resolveCheck = resolve)),
+  });
+  await ui.load();
+  const pending = ui.backgroundChecks.get("a");
+  ui.syncChecks.set("a", { version: 1, status: "verified", at: Date.now() });
+  ui.data.accounts[0].sync_status = "verified";
+  resolveCheck({ status: "pending", message: "过期响应" });
+  await pending;
+  assert.equal(ui.data.accounts[0].sync_status, "verified");
+});
 import {
   planStatus,
   postStatus,
