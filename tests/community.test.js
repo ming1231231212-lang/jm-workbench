@@ -85,3 +85,19 @@ test('delete opens an escaped, versioned confirmation without sending a request'
  assert.match(dialog,/重复账号/);assert.match(dialog,/尚未核验登录/);assert.ok(!dialog.includes('<script>'));
  assert.match(dialog,/close-dialog/);assert.match(dialog,/确认删除/);
 });
+
+
+test('Juejin compose keeps Chinese tags separate from DEV tags',()=>{
+ const fd=new FormData();for(const [k,v] of Object.entries({request_id:'juejin-request',title:'掘金标题',body:'AI辅助整理',account_ids:'jj',destination_jj:'人工智能',platform_tags:'人工智能，AI编程',tags:'ai'}))fd.append(k,v);
+ const result=communityPayload(fd);assert.deepEqual(result.platform_tags,['人工智能','AI编程']);assert.deepEqual(result.tags,['ai']);
+});
+
+test('Juejin daily cards show category and article tags without Tieba suffix',()=>{
+ const html=dailyPage({plans:[{id:'p',platform:'juejin',state:'enabled',payload:{name:'掘金计划',hour:10,minute:0,board:'人工智能',topics:[{title:'主题',body:'正文',platform_tags:['AI编程']}],replies:[],reply_rules:[]},remaining_topics:1,remaining_replies:0,message:'缺口',days:[]}]});
+ assert.match(html,/掘金 · 分类：人工智能/);assert.match(html,/标签：AI编程/);assert.ok(!html.includes('人工智能吧'));
+});
+
+test('Juejin account synchronization is limited to once per five minutes',async()=>{
+ let now=1000000,checks=0;const ui=new CommunityUI({clock:()=>now,request:async path=>{if(path.endsWith('/state'))return {accounts:[{id:'jj',platform:'juejin',enabled:true,version:1}]};checks++;return {status:'verified'};}});
+ await ui.load();now+=30001;await ui.load();assert.equal(checks,1);now+=300000;await ui.load();assert.equal(checks,2);
+});

@@ -7,7 +7,7 @@ _ROWS = [
     ('tieba','百度贴吧','国内','AI 互联网 综合兴趣','browser','https://tieba.baidu.com/','https://tieba.baidu.com/','文字主题帖 / 顶层评论（正文≤2000字）','吧名，如人工智能；名称本身带“吧”字时保留',31),
     ('xiaohongshu','小红书','国内','AI工具 效率 生活','web','https://www.xiaohongshu.com/','https://creator.xiaohongshu.com/publish/publish','笔记','',20),
     ('csdn','CSDN','国内','AI开发 编程 技术','web','https://www.csdn.net/','https://editor.csdn.net/md/','博客','',100),
-    ('juejin','稀土掘金','国内','AI编程 互联网 开发','web','https://juejin.cn/','https://juejin.cn/editor/drafts/new?v=2','文章/沸点','',100),
+    ('juejin','稀土掘金','国内','AI编程 互联网 开发','browser','https://juejin.cn/','https://juejin.cn/editor/drafts/new?v=2','技术文章 / 顶层评论','文章分类，如人工智能；评论填写文章HTTPS链接',100),
     ('v2ex','V2EX','国内','互联网 AI 独立开发','web','https://www.v2ex.com/','https://www.v2ex.com/new','主题帖','节点名（可选）',120),
     ('bilibili','哔哩哔哩','国内','AI教程 科技 内容创作','web','https://www.bilibili.com/','https://t.bilibili.com/','动态/图文','',100),
     ('weibo','微博','国内','AI资讯 互联网 科技','web','https://weibo.com/','https://weibo.com/','微博','',120),
@@ -44,6 +44,8 @@ def destination(platform_id, value):
     value = value.strip()
     if platform_id == 'tieba' and (not value or len(value)>50 or re.search(r'[\x00-\x1f<>]', value)):
         raise ValueError('请填写有效的贴吧吧名/板块')
+    if platform_id == 'juejin' and value not in ('人工智能','开发工具','前端','后端','Android','iOS','代码人生','阅读'):
+        raise ValueError('请选择掘金有效的文章分类')
     if platform_id == 'reddit' and not re.fullmatch(r'[A-Za-z0-9_]{2,30}', value):
         raise ValueError('请填写有效的Reddit社区名称，不带r/')
     if platform_id == 'huggingface' and not re.fullmatch(r'(?:(?:datasets|spaces)/)?[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+', value):
@@ -59,6 +61,8 @@ def compose_url(platform_id, target=''):
         if target.startswith('https://'):
             return tieba_thread_url(target)
         return 'https://tieba.baidu.com/f?kw='+quote(destination(platform_id,target))
+    if platform_id=='juejin' and target.startswith('https://'):
+        return juejin_thread_url(target)
     if platform_id=='reddit' and target:
         return 'https://www.reddit.com/r/'+destination(platform_id,target)+'/submit'
     if platform_id=='v2ex' and target:
@@ -81,4 +85,24 @@ def safe_post_url(platform_id, value):
     domains |= extras.get(platform_id,set())
     if parsed.scheme!='https' or parsed.hostname not in domains or parsed.username or parsed.password or parsed.port not in (None,443) or len(value)>2000:
         raise ValueError('请填写该平台的HTTPS帖子链接')
+    return value
+
+
+def juejin_thread_url(value):
+    parsed=urlparse(value.strip())
+    if (parsed.scheme!='https' or parsed.hostname!='juejin.cn' or parsed.username or parsed.password or
+        parsed.port not in (None,443) or not re.fullmatch(r'/post/[1-9][0-9]{10,23}',parsed.path)):
+        raise ValueError('请填写掘金文章HTTPS链接，如 https://juejin.cn/post/1234567890123456789')
+    return 'https://juejin.cn'+parsed.path
+
+
+def thread_url(platform_id,value):
+    if platform_id=='tieba':return tieba_thread_url(value)
+    if platform_id=='juejin':return juejin_thread_url(value)
+    raise ValueError('此平台尚未支持评论')
+
+
+def tag_label(value):
+    if not re.fullmatch(r'[\w +.#-]{1,30}',value,flags=re.UNICODE):
+        raise ValueError('标签需1–30字，不得包含链接或路径')
     return value

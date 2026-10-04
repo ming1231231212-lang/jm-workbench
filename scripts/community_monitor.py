@@ -100,6 +100,8 @@ def analyse(raw, now):
                           'state': plan['state'], 'message': plan.get('message', '')})
             if plan['state'] == 'paused' and not plan.get('message', '').startswith(('用户', '配置已保存')):
                 issue('plan:' + plan['id'], 'warning', plans[-1]['name'] + '：' + plan.get('message', '计划暂停'))
+            elif plan['state'] == 'enabled' and '不足' in plan.get('message', ''):
+                issue('plan:' + plan['id'], 'warning', plans[-1]['name'] + '：' + plan['message'])
         seen_content, seen_target = {}, {}
         account_lookup = {a['id']: a for a in community.get('accounts', [])}
         for post in community.get('posts', []):

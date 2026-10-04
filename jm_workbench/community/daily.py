@@ -4,7 +4,7 @@ import json
 import threading
 from datetime import datetime, timedelta
 from .models import CommunityPost
-from .registry import tieba_thread_url
+from .registry import thread_url, destination, tag_label
 from ..core.db import dumps,uid
 
 
@@ -53,13 +53,21 @@ class DailyPlans:
                     WHERE i.plan_id=? AND i.day=?''',(p['id'],d['day']))
                 d['counts']={k:{'planned':sum(j['kind']==k for j in jobs),'submitted':sum(j['kind']==k and j['state']=='submitted' for j in jobs),
                    'waiting':sum(j['kind']==k and j['state'] in ('queued','paused') for j in jobs),'failed':sum(j['kind']==k and j['state'] in ('failed','unknown') for j in jobs)} for k in ('thread','reply')}
-            p['days']=days;plans.append(p)
+            p['platform']=self.s.account(p['payload']['account_id'])['platform'];p['days']=days;plans.append(p)
         return plans
 
     def save(self,payload,ident=None):
         data=payload.model_dump();now=self.s.clock()
         a=self.s.account(data['account_id'])
-        if a['platform']!='tieba':raise ValueError('每日评论计划仅支持百度贴吧')
+        if a['platform'] not in ('tieba','juejin'):raise ValueError('每日评论计划仅支持百度贴吧和掘金')
+        destination(a['platform'],data['board'])
+        for r in data['replies']:thread_url(a['platform'],r['url'])
+        if a['platform']=='juejin':
+            from .juejin import validate_payload
+            for label in data['source_boards']:tag_label(label)
+            for topic in data['topics']:validate_payload({**topic,'kind':'thread','category':data['board']},data['board'])
+            for reply in data['replies']+data['reply_rules']:validate_payload({**reply,'kind':'reply'},data['replies'][0]['url'] if data['replies'] else 'https://juejin.cn/post/1000000000000000000')
+        elif any(len(t['title'])>31 for t in data['topics']):raise ValueError('贴吧标题最多31字')
         with self.lock,self.store.connect(True) as db:
             # Account deletion and plan creation share the same write transaction.
             if not db.execute('SELECT 1 FROM community_accounts WHERE id=?',(a['id'],)).fetchone():raise ValueError('账号已删除，请重新选择')
@@ -80,8 +88,8 @@ class DailyPlans:
             if action=='enable':
                 self.s.check_account(p['payload']['account_id']);a=self.s.account(p['payload']['account_id'])
                 with self.store.connect(True) as db:
-                    if db.execute("SELECT 1 FROM community_risk WHERE platform='tieba'").fetchone():raise ValueError('贴吧存在暂停记录，先核实后再启用每日计划')
-                    if db.execute("SELECT 1 FROM community_plans WHERE state='enabled' AND id!=?",(ident,)).fetchone():raise ValueError('贴吧已有启用的每日计划，请先暂停；每日预算所有账号共享')
+                    if db.execute("SELECT 1 FROM community_risk WHERE platform=?",(a['platform'],)).fetchone():raise ValueError('此平台存在暂停记录，先核实后再启用每日计划')
+                    if db.execute("SELECT 1 FROM community_plans p JOIN community_accounts a ON a.id=json_extract(p.payload,'$.account_id') WHERE p.state='enabled' AND p.id!=? AND json_extract(a.data,'$.platform')=?",(ident,a['platform'])).fetchone():raise ValueError('此平台已有启用的每日计划，请先暂停；每日预算所有账号共享')
                     db.execute("UPDATE community_plans SET state='enabled',identity=?,account_version=?,revision=?,message='每日计划已启用',updated=? WHERE id=?",(a['identity'],a['version'],self.s.cfg.code_revision,now,ident))
                 return {'message':'每日计划已启用；暂停过的发送任务不会自动恢复'}
             if action=='pause':
@@ -130,7 +138,7 @@ class DailyPlans:
             reason=''
             if not a['enabled'] or a['version']!=p['account_version'] or a['identity']!=p['identity'] or p['revision']!=self.s.cfg.code_revision:
                 reason='账号或代码版本改变，请检查计划后重新启用'
-            if self.store.rows("SELECT 1 FROM community_risk WHERE platform='tieba'"):reason='贴吧有暂停记录，本日停止发送'
+            if self.store.rows('SELECT 1 FROM community_risk WHERE platform=?',(a['platform'],)):reason='此平台有暂停记录，本日停止发送'
             if reason:
                 with self.store.connect(True) as db:db.execute("UPDATE community_plans SET state='paused',message=?,updated=? WHERE id=?",(reason,now,ident))
                 return {'message':reason}
@@ -140,10 +148,13 @@ class DailyPlans:
                 # Recheck live identity before materializing any write jobs.
                 self.s.check_account(a['id'])
                 used={r['material'] for r in self.store.rows('SELECT material FROM community_plan_items WHERE plan_id=?',(ident,))}
-                targets={r['value'] for r in self.store.rows("SELECT value FROM community_claims WHERE platform='tieba' AND identity=? AND scope='reply_target'",(a['identity'],))}
+                targets={r['value'] for r in self.store.rows("SELECT value FROM community_claims WHERE platform=? AND identity=? AND scope='reply_target'",(a['platform'],a['identity']))}
                 prepared=[]
                 topics=[t for t in d['topics'] if material_id(t['body']) not in used]
-                if topics:prepared.append(('thread',topics[0],d['board']))
+                midnight=local.replace(hour=0,minute=0,second=0,microsecond=0).timestamp()
+                today=self.store.rows("SELECT snapshot FROM community_jobs WHERE platform=? AND (started>=? OR (state='recorded' AND updated>=?))",(a['platform'],midnight,midnight))
+                thread_used=any(json.loads(r['snapshot'])['payload'].get('kind','thread')=='thread' for r in today)
+                if topics and not thread_used:prepared.append(('thread',topics[0],d['board']))
                 replies=[]
                 for r in d['replies']:
                     key=material_id(r['body'])
@@ -156,7 +167,7 @@ class DailyPlans:
                     try:candidates=self.s.adapter.discover(self.s.account(a['id'],True),d['source_boards'])
                     except Exception:candidates=[];discover_note='本次读取候选未完成；没有用无关帖子补足'
                     for c in candidates:
-                        url=tieba_thread_url(c['url'])
+                        url=thread_url(a['platform'],c['url'])
                         if url in targets or c.get('author_id')==a['identity']:continue
                         r=next((r for r in rules if material_id(r['body']) not in used and eligible(r,c)),None)
                         if not r:continue
@@ -168,8 +179,10 @@ class DailyPlans:
                 for kind,material,target in prepared:
                     key=material_id(material['body'])
                     request='daily-'+hashlib.sha256((ident+day+key).encode()).hexdigest()[:40]
-                    payload=CommunityPost(request_id=request,kind=kind,title=material['title'][:31] if kind=='thread' else '回复：'+material['title'][:27],
+                    payload=CommunityPost(request_id=request,kind=kind,title=material['title'][:(31 if a['platform']=='tieba' else 100)] if kind=='thread' else '回复：'+material['title'][:27],
                         body=material['body'],source_title=material.get('title','') if kind=='reply' else '',source_excerpt=material.get('excerpt',''),
+                        category=d['board'] if a['platform']=='juejin' and kind=='thread' else '',
+                        platform_tags=material.get('platform_tags',[]) if kind=='thread' else (material.get('source_tags') or material.get('tags',[]))[:3],
                         targets=[{'account_id':a['id'],'destination':target}])
                     # Each post+job+plan association is protected by the planner lock;
                     # worker cannot send until prepare returns (Community.step_lock).
@@ -182,7 +195,7 @@ class DailyPlans:
                         errors.append(str(ex));continue
                     created[kind]+=1
                 message=f"已安排帖子 {created['thread']}/1、评论 {created['reply']}/5；同帖和内容不重复"
-                if created['thread']<1:message+='；主题素材不足'
+                if created['thread']<1:message+='；今日文章额度已用（含网页登记）' if thread_used else '；主题素材不足'
                 if created['reply']<5:message+='；合适目标或未用评论素材不足'
                 if discover_note:message+='；'+discover_note
                 if errors:message+='；'+errors[0]

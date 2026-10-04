@@ -34,8 +34,16 @@ class CommunityPost(BaseModel):
     targets: list[Target] = Field(min_length=1,max_length=20)
     schedule_at: float = 0
     kind: Literal['thread','reply'] = 'thread'
+    category: str = Field(default='',max_length=30)
+    platform_tags: list[str] = Field(default_factory=list,max_length=3)
     source_title: str = Field(default='',max_length=200)
     source_excerpt: str = Field(default='',max_length=6000)
+
+    @field_validator('platform_tags')
+    @classmethod
+    def platform_tags_valid(cls, values):
+        from .registry import tag_label
+        return list(dict.fromkeys(tag_label(v) for v in values))
 
     @field_validator('schedule_at')
     @classmethod
@@ -77,9 +85,16 @@ class ClearRecord(BaseModel):
 
 class DailyTopic(BaseModel):
     model_config=ConfigDict(extra='forbid',str_strip_whitespace=True)
-    title: str = Field(min_length=5,max_length=31)
+    title: str = Field(min_length=5,max_length=100)
     body: str = Field(min_length=20,max_length=2000)
     keyword: str = Field(default='',max_length=60)
+    platform_tags: list[str] = Field(default_factory=list,max_length=3)
+
+    @field_validator('platform_tags')
+    @classmethod
+    def tags_valid(cls, values):
+        from .registry import tag_label
+        return list(dict.fromkeys(tag_label(v) for v in values))
 
 
 class ReplyMaterial(BaseModel):
@@ -89,12 +104,14 @@ class ReplyMaterial(BaseModel):
     excerpt: str = Field(min_length=10,max_length=6000)
     body: str = Field(min_length=20,max_length=2000)
     keyword: str = Field(default='',max_length=60)
+    source_tags: list[str] = Field(default_factory=list,max_length=3)
 
     @field_validator('url')
     @classmethod
     def valid_url(cls,value):
-        from .registry import tieba_thread_url
-        return tieba_thread_url(value)
+        from .registry import thread_url
+        from urllib.parse import urlparse
+        return thread_url('juejin' if urlparse(value).hostname=='juejin.cn' else 'tieba',value)
 
 
 class ReplyRule(BaseModel):

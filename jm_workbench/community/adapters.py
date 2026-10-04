@@ -227,6 +227,9 @@ class CommunityAdapter:
 
     def check(self, account, secret):
         p=account['platform']
+        if p=='juejin':
+            from .juejin import JuejinBrowser
+            return JuejinBrowser().run(account,None,'')
         if p=='tieba':
             return self.tieba(account, None, '')
         if not platform(p)['automatic']:raise NotSubmitted('此平台使用网页发布，不提供自动身份核验')
@@ -241,6 +244,9 @@ class CommunityAdapter:
 
     def discover(self,account,boards):
         """Read a bounded set of recent public threads; never click interaction buttons."""
+        if account['platform']=='juejin':
+            from .juejin import JuejinBrowser
+            return JuejinBrowser().discover(account,boards)
         from playwright.sync_api import sync_playwright
         with sync_playwright() as pw:
             browser=pw.chromium.connect_over_cdp(endpoint(account['profile_dir']),timeout=10000)
@@ -276,6 +282,9 @@ class CommunityAdapter:
 
     def publish(self, account, secret, payload, target):
         p=account['platform']
+        if p=='juejin':
+            from .juejin import JuejinBrowser
+            return JuejinBrowser().run(account,payload,target)
         if payload.get('kind')=='reply':
             if p!='tieba':raise NotSubmitted('该平台尚未适配评论发布')
             target=tieba_thread_url(target)

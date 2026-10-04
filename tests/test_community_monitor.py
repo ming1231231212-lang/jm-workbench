@@ -166,3 +166,10 @@ def test_web_link_registration_shown_separately_from_platform_receipts():
     rendered = monitor.html_report(result)
     assert '帖子 0 篇' in rendered and '网页发布登记 1 条' in rendered
     assert '百度贴吧' in rendered and '已登记链接 · 未核验公开可见' in rendered
+
+
+def test_enabled_plan_with_material_shortage_is_actionable():
+    raw = sample()
+    raw['community']['plans'] = [{'id':'plan','state':'enabled','payload':{'name':'每日计划'},'message':'合适目标或未用评论素材不足'}]
+    result = monitor.analyse(raw, NOW)
+    assert result['status'] == 'warning' and '不足' in result['issues'][0]['message']
