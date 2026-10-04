@@ -8,9 +8,12 @@
     <link rel="stylesheet" href="/static/data-page.css" />
     <link rel="stylesheet" href="/static/workbench.css" />
     <link rel="stylesheet" href="/static/community.css" />
+    <link rel="stylesheet" href="/static/workspace.css" />
+    <link rel="stylesheet" href="/static/workspace-modules.css" />
     <link rel="stylesheet" href="/static/community-v2.css" />
   </head>
-  <body>
+  <body class="jm-workspace">
+    <a class="skip-link" href="#content">跳转到主要内容</a>
     <div class="shell">
       <aside class="sidebar">
         <a class="brand" href="#tasks"
@@ -55,7 +58,7 @@
             </button>
           </div>
         </header>
-        <div class="content" id="content">
+        <div class="content" id="content" tabindex="-1">
           <div class="empty">正在连接JM工作台…</div>
         </div>
         <footer>JM工作台 <span>任务、数据、内容发布，一处管理</span></footer>

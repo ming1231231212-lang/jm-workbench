@@ -111,13 +111,6 @@ export class CommunityWorkspace extends CommunityUI {
   }
   activate() {
     document.body.classList.add("community-v2");
-    document.querySelector(".community-mobile-menu").innerHTML = icon("menu");
-    try {
-      document.body.classList.toggle(
-        "community-dense",
-        localStorage.getItem("jm-community-density") === "compact",
-      );
-    } catch {}
     if (!document.querySelector("#community-drawer")) {
       const d = document.createElement("dialog");
       d.id = "community-drawer";
@@ -138,11 +131,7 @@ export class CommunityWorkspace extends CommunityUI {
   }
   deactivate() {
     document.querySelector("#community-drawer")?.close();
-    document.body.classList.remove(
-      "community-v2",
-      "community-dense",
-      "community-menu-open",
-    );
+    document.body.classList.remove("community-v2");
   }
   openDetail(type, id) {
     this.returnFocus = document.activeElement;
@@ -526,24 +515,6 @@ export class CommunityWorkspace extends CommunityUI {
       this.readWizard();
       this.wizard.step--;
       return this.renderWizard();
-    }
-    if (action === "com-v2-density") {
-      const dense = document.body.classList.toggle("community-dense");
-      try {
-        localStorage.setItem(
-          "jm-community-density",
-          dense ? "compact" : "comfortable",
-        );
-      } catch {}
-      this.toast(dense ? "已切换紧凑列表" : "已切换舒适列表");
-      return;
-    }
-    if (action === "com-v2-menu") {
-      const open = document.body.classList.toggle("community-menu-open");
-      document
-        .querySelector(".community-mobile-menu")
-        ?.setAttribute("aria-expanded", String(open));
-      return;
     }
     return super.handle(action, id);
   }

@@ -1,0 +1,422 @@
+/* Existing module layouts use the shared visual tokens and controls. */
+body.jm-workspace .content {
+  min-width: 0;
+}
+body.jm-workspace p,
+body.jm-workspace details,
+body.jm-workspace .event-list p,
+body.jm-workspace .event-list small,
+body.jm-workspace .protection-grid p {
+  color: var(--muted);
+}
+body.jm-workspace .field > span {
+  color: #344750;
+}
+body.jm-workspace .empty h3 {
+  color: #56636d;
+}
+body.jm-workspace .empty p {
+  color: var(--muted);
+}
+body.jm-workspace .content > .spaced {
+  margin-top: 24px;
+}
+body.jm-workspace .panel.form-panel {
+  padding: 24px;
+}
+body.jm-workspace .form-grid {
+  gap: 18px 22px;
+}
+body.jm-workspace .form-error {
+  padding: 12px 15px;
+  margin-bottom: 18px;
+  border-radius: 7px;
+  color: var(--red);
+  background: var(--red-soft);
+  border: 1px solid #edc9c6;
+  overflow-wrap: anywhere;
+}
+body.jm-workspace #dialog:has(#task-form),
+body.jm-workspace #dialog:has(#pub-form) {
+  width: 820px;
+}
+body.jm-workspace #dialog .eyebrow {
+  display: none;
+}
+body.jm-workspace #dialog h2 {
+  margin-bottom: 0;
+}
+body.jm-workspace .section-description,
+body.jm-workspace .muted,
+body.jm-workspace .count-label,
+body.jm-workspace .table-wrap table small,
+body.jm-workspace .panel-caption,
+body.jm-workspace .summary-strip span,
+body.jm-workspace .summary-strip small,
+body.jm-workspace .task-progress,
+body.jm-workspace .data-summary span,
+body.jm-workspace .data-summary small {
+  color: var(--muted);
+}
+body.jm-workspace .table-wrap table th {
+  background: #fafbfc;
+  color: #74808a;
+}
+body.jm-workspace .table-wrap table td {
+  overflow-wrap: anywhere;
+}
+body.jm-workspace .panel-caption {
+  background: #fafbfc;
+}
+body.jm-workspace .badge.gray {
+  background: #f0f3f5;
+  color: #66757f;
+}
+body.jm-workspace .badge.gray::before {
+  background: currentColor;
+}
+body.jm-workspace .summary-strip {
+  margin-bottom: 24px;
+  border-color: var(--line);
+  border-radius: 9px;
+  padding: 20px 0;
+}
+body.jm-workspace .summary-strip strong {
+  font-size: 29px;
+  color: var(--ink);
+}
+body.jm-workspace .summary-strip > div {
+  min-width: 0;
+}
+body.jm-workspace .task-progress b,
+body.jm-workspace .task-name {
+  color: var(--ink);
+}
+body.jm-workspace .task-kind {
+  color: var(--amber);
+  background: var(--amber-soft);
+  border: 1px solid #f4e4ce;
+}
+body.jm-workspace .task-kind.peiwang_comments {
+  color: var(--blue);
+  background: var(--blue-soft);
+  border-color: #dfe9f4;
+}
+body.jm-workspace .task-kind.crawler {
+  color: var(--green);
+  background: var(--green-soft);
+  border-color: #dcece6;
+}
+body.jm-workspace .task-icon.purple {
+  color: var(--blue);
+  background: var(--blue-soft);
+}
+body.jm-workspace .task-list td {
+  padding-top: 17px;
+  padding-bottom: 17px;
+}
+body.jm-workspace .row-actions {
+  flex-wrap: wrap;
+  gap: 5px;
+}
+body.jm-workspace .alert {
+  border-radius: 8px;
+  box-shadow: none;
+  align-items: center;
+  overflow-wrap: anywhere;
+}
+body.jm-workspace .alert.red {
+  background: var(--red-soft);
+  color: var(--red);
+  border-color: #f0d9d6;
+}
+body.jm-workspace .alert.amber {
+  background: var(--amber-soft);
+  color: var(--amber);
+  border-color: #f1e0c7;
+}
+body.jm-workspace .note,
+body.jm-workspace .data-explanation {
+  background: var(--green-soft);
+  color: #446d65;
+  border-radius: 8px;
+}
+body.jm-workspace .account-card,
+body.jm-workspace .task-card,
+body.jm-workspace .comment-templates,
+body.jm-workspace .data-card,
+body.jm-workspace .stats article,
+body.jm-workspace .data-summary article {
+  border-color: var(--line);
+  border-radius: 9px;
+  box-shadow: none;
+}
+body.jm-workspace .account-card {
+  padding: 22px;
+  background: #fff;
+}
+body.jm-workspace .account-card .card-footer,
+body.jm-workspace .task-card .card-footer {
+  flex-wrap: wrap;
+}
+body.jm-workspace .subnav {
+  gap: 25px;
+}
+body.jm-workspace .subnav button {
+  color: var(--muted);
+  font-size: 13px;
+  border-radius: 0;
+}
+body.jm-workspace .subnav button.active {
+  color: var(--green);
+}
+body.jm-workspace .subnav button.active::after {
+  background: var(--green);
+}
+body.jm-workspace .service-indicator {
+  color: var(--muted);
+}
+body.jm-workspace .connection-good {
+  color: var(--green);
+}
+body.jm-workspace .selection-list {
+  border-color: var(--line);
+  border-radius: 8px;
+}
+body.jm-workspace .selection-item:has(input:checked) {
+  background: var(--green-soft);
+  border-color: #b6d8ce;
+}
+body.jm-workspace .compose-section {
+  border-color: var(--line);
+}
+body.jm-workspace .step-label {
+  color: var(--green);
+  background: var(--green-soft);
+}
+body.jm-workspace .upload-trigger {
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+}
+body.jm-workspace .filters input,
+body.jm-workspace .filters select,
+body.jm-workspace .section-heading > select {
+  min-height: 38px;
+  font-size: 12px;
+  border-color: var(--line);
+}
+body.jm-workspace .filters {
+  gap: 10px;
+}
+body.jm-workspace .category-filter {
+  border-color: var(--line);
+  color: var(--muted);
+}
+body.jm-workspace .category-filter.selected {
+  color: var(--green);
+  background: var(--green-soft);
+  border-color: #a5d2c6;
+}
+body.jm-workspace .category-filter b,
+body.jm-workspace .category-filter.selected b {
+  color: inherit;
+}
+body.jm-workspace .comment-templates {
+  color: var(--ink);
+}
+body.jm-workspace .template-card,
+body.jm-workspace .comment-result {
+  background: #f7f9fa;
+  border-color: var(--line);
+}
+body.jm-workspace .template-card span,
+body.jm-workspace .template-card small,
+body.jm-workspace .template-condition,
+body.jm-workspace .comment-result p,
+body.jm-workspace .comment-result small {
+  color: var(--muted);
+}
+body.jm-workspace .template-card blockquote,
+body.jm-workspace .comment-result blockquote {
+  border-left-color: #79b8a7;
+  color: var(--ink);
+}
+body.jm-workspace .comment-result > b {
+  color: var(--green-dark);
+}
+body.jm-workspace .welcome {
+  background: #eff6f3;
+  border-color: var(--line);
+  border-radius: 10px;
+}
+body.jm-workspace .flow-node.accent {
+  background: var(--green);
+}
+body.jm-workspace .matrix-table {
+  min-width: 720px;
+}
+body.jm-workspace .matrix-table th {
+  min-width: 150px;
+}
+body.jm-workspace .table-wrap {
+  max-width: 100%;
+}
+body.jm-workspace:not(.community-v2) .table-wrap table {
+  min-width: 640px;
+}
+body.jm-workspace:not(.community-v2) .table-wrap:focus-visible {
+  outline: 2px solid var(--green);
+  outline-offset: -2px;
+}
+body.jm-workspace.community-dense .account-card {
+  padding: 16px;
+}
+body.jm-workspace.community-dense .data-list article {
+  padding-top: 14px;
+  padding-bottom: 14px;
+}
+body.jm-workspace.community-dense .event-list > div {
+  padding: 10px 0;
+}
+@media (max-width: 1100px) {
+  body.jm-workspace:not(.community-v2) .account-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+  body.jm-workspace .top-actions {
+    flex-wrap: wrap;
+  }
+  body.jm-workspace .topbar {
+    height: auto;
+    padding-top: 10px;
+    padding-bottom: 10px;
+  }
+}
+@media (max-width: 680px) {
+  body.jm-workspace:not(.community-v2) .topbar {
+    flex-wrap: wrap;
+    gap: 8px;
+  }
+  body.jm-workspace:not(.community-v2) .top-actions {
+    flex-wrap: wrap;
+    gap: 5px;
+  }
+  body.jm-workspace:not(.community-v2)
+    .top-actions
+    [data-action="launch"]:not([hidden]) {
+    display: inline-flex;
+    font-size: 11px;
+  }
+  body.jm-workspace .panel.form-panel {
+    padding: 19px 16px;
+  }
+  body.jm-workspace .form-grid {
+    grid-template-columns: 1fr;
+    gap: 0;
+  }
+  body.jm-workspace .summary-strip {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    padding: 0;
+  }
+  body.jm-workspace .summary-strip > div {
+    padding: 15px 18px;
+    border-bottom: 1px solid var(--line);
+  }
+  body.jm-workspace .summary-strip > div:nth-child(2n) {
+    border-right: 0;
+  }
+  body.jm-workspace .summary-strip > div:nth-child(n + 3) {
+    border-bottom: 0;
+  }
+  body.jm-workspace .summary-strip strong {
+    font-size: 25px;
+  }
+  body.jm-workspace .data-summary {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 10px;
+  }
+  body.jm-workspace .data-summary article {
+    padding: 14px 16px;
+  }
+  body.jm-workspace:not(.community-v2) .account-grid,
+  body.jm-workspace .protection-grid,
+  body.jm-workspace .template-grid {
+    grid-template-columns: 1fr;
+  }
+  body.jm-workspace .section-heading {
+    flex-wrap: wrap;
+    align-items: flex-start;
+  }
+  body.jm-workspace .publish-toolbar {
+    flex-wrap: wrap;
+    gap: 10px;
+    padding-bottom: 12px;
+  }
+  body.jm-workspace .service-indicator {
+    margin-left: 0;
+  }
+  body.jm-workspace .data-filters > * {
+    flex: 1 1 100%;
+    min-width: 0;
+    max-width: 100%;
+  }
+  body.jm-workspace .alert {
+    flex-wrap: wrap;
+  }
+  body.jm-workspace .note {
+    overflow-wrap: anywhere;
+  }
+  body.jm-workspace:not(.community-v2) .table-wrap table.workspace-records {
+    display: block;
+    width: 100%;
+    min-width: 0;
+  }
+  body.jm-workspace .workspace-records thead {
+    display: none;
+  }
+  body.jm-workspace .workspace-records tbody {
+    display: block;
+  }
+  body.jm-workspace .workspace-records tr {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+    gap: 14px 12px;
+    padding: 18px 16px;
+    border-bottom: 1px solid var(--line);
+  }
+  body.jm-workspace .workspace-records tr:last-child {
+    border-bottom: 0;
+  }
+  body.jm-workspace .workspace-records td {
+    display: block;
+    min-width: 0;
+    width: auto;
+    max-width: none;
+    padding: 0 !important;
+    border: 0;
+    text-align: left;
+  }
+  body.jm-workspace .workspace-records td:first-child,
+  body.jm-workspace .workspace-records td:last-child,
+  body.jm-workspace .workspace-records td[colspan] {
+    grid-column: 1 / -1;
+  }
+  body.jm-workspace
+    .workspace-records
+    td[data-label]:not(:first-child):not(:last-child)::before {
+    content: attr(data-label);
+    display: block;
+    margin-bottom: 5px;
+    font-size: 10px;
+    color: var(--muted);
+  }
+  body.jm-workspace .workspace-records .row-actions {
+    justify-content: flex-end;
+  }
+  body.jm-workspace .workspace-records .empty {
+    padding: 24px 4px;
+  }
+  body.jm-workspace .workspace-records .empty-symbol {
+    font-size: 24px;
+  }
+}

@@ -187,3 +187,14 @@ Next Step：等待用户完成Reddit真人验证和登录，再核对r/SideProje
 4. 备份部署、业务数据逐表核对、服务守护与生产只读验收 — complete；两次部署各20张业务表一致，4项生产检查通过，守护healthy。代码及文档按现有GitHub分支交付，实际推送与CI回执保存在outputs/community-ui-v2。
 
 设计和代码职责见docs/community-ui-v2.md。继续保留真实平台暂停与原有记录，不恢复Reddit测试或发送测试内容。
+
+## 2026-10-04：全站风格统一与功能检查
+
+用户要求将全部模块统一到已确认的社区V2风格，并检查所有功能。实施在outputs/unified-ui-20261004/source独立worktree，现有正式服务保持可用。
+
+1. 审计六个主模块、四个二级路由及功能清单 — complete。
+2. 共用样式、导航、表单反馈与各模块视觉统一 — complete。
+3. 全量回归、隔离浏览器功能检查及视觉修复 — complete：392 Python、62 Node、144浏览器检查，真实发送0。
+4. 备份部署、生产检查与GitHub — in_progress。
+
+Next Step：备份部署后核验真实页面、业务表一致性、服务守护与GitHub。

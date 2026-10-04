@@ -2,6 +2,7 @@ import * as views from "./views.js";
 import { escape as e } from "./ui.js";
 import { CommunityWorkspace } from "./community-v2.js";
 import { icon as communityIcon } from "./community-icons.js";
+import { initializeWorkspace, ViewRequests, routeIcons } from "./workspace.js";
 import {
   PublishingUI,
   publishingPage,
@@ -25,6 +26,8 @@ let state,
   loading = false;
 const content = document.querySelector("#content"),
   dialog = document.querySelector("#dialog");
+const shell = initializeWorkspace(),
+  viewRequests = new ViewRequests();
 const publishing = new PublishingUI({
   request,
   token: () => state?.token || "",
@@ -48,7 +51,7 @@ function toast(text, error = false) {
   document
     .querySelectorAll(".community-operation-error")
     .forEach((el) => el.remove());
-  if (error && page === "community") {
+  if (error) {
     const open =
       document.querySelector("#dialog[open] #dialog-content") ||
       document.querySelector("#community-drawer[open] .drawer-body");
@@ -88,10 +91,17 @@ async function request(path, body, method = "POST") {
   return result;
 }
 async function render() {
+  const previousPage = page;
+  const current = viewRequests.begin();
   page = location.hash.slice(1) || "tasks";
   if (!views.pages.some((p) => p[0] === page)) page = "tasks";
   const route = views.pages.find((p) => p[0] === page),
     activePage = route[3] || page;
+  if (previousPage !== page) {
+    shell.closeMenu();
+    content.innerHTML =
+      '<div class="empty" role="status">正在读取' + e(route[2]) + "…</div>";
+  }
   if (page === "community") community.activate();
   else community.deactivate();
   document.querySelector("#page-label").textContent = views.pages.find(
@@ -101,45 +111,65 @@ async function render() {
     .filter((p) => !p[3])
     .map(
       ([id, icon, title]) =>
-        `<a href="#${id}" class="${id === activePage ? "active" : ""}" ${id === activePage ? 'aria-current="page"' : ""}><span>${page === "community" ? communityIcon({ tasks: "list-checks", publishing: "video", community: "messages-square", data: "chart-no-axes-combined", accounts: "users-round", settings: "settings-2" }[id]) : icon}</span>${title}</a>`,
+        `<a href="#${id}" class="${id === activePage ? "active" : ""}" ${id === activePage ? 'aria-current="page"' : ""}><span>${communityIcon(routeIcons[id])}</span>${title}</a>`,
     )
     .join("");
   document.querySelector("#version").textContent =
     "v" + state.version + " · " + state.revision.slice(0, 8);
   document.querySelector('[data-action="launch"]').hidden =
     activePage !== "tasks";
-  document.querySelector('[data-action="stop"]').hidden = page === "community";
-  if (page === "community") {
-    await community.load();
-    // A slow account check must not overwrite a view the user has left.
-    if ((location.hash.slice(1) || "tasks") !== "community") return;
-    content.innerHTML = community.page();
-    if (community.filters.drawer) community.draw();
-  } else if (page === "publishing") {
-    const data = await publishing.load();
-    content.innerHTML = publishingPage(data, publishing.tab, publishing.filter);
-  } else if (page === "accounts") {
-    content.innerHTML =
-      views.accounts(state) + publishingAccounts(await publishing.load());
-  } else if (page === "settings") {
-    content.innerHTML =
-      views.settings(state) + publishingSettings(await publishing.load());
-  } else if (page === "data") {
-    const result = await request(
-      `/api/data?page=${dataPage}&q=${encodeURIComponent(q)}&decision=${encodeURIComponent(decision)}&batch=${encodeURIComponent(dataBatch)}&category=${encodeURIComponent(dataCategory)}`,
-    );
-    dataPage = result.page;
-    content.innerHTML = views.data(
-      state,
-      result,
-      q,
-      decision,
-      dataBatch,
-      dataCategory,
-    );
-  } else if (page === "runs")
-    content.innerHTML = views.runs(state, await request("/api/attempts"));
-  else content.innerHTML = views[page](state);
+  document.querySelector('[data-action="stop"]').hidden =
+    activePage !== "tasks";
+  let html;
+  try {
+    if (page === "community") {
+      await community.load();
+      if (!current()) return;
+      html = community.page();
+    } else if (page === "publishing") {
+      const data = await publishing.load();
+      html = publishingPage(data, publishing.tab, publishing.filter);
+    } else if (page === "accounts") {
+      html =
+        views.accounts(state) + publishingAccounts(await publishing.load());
+    } else if (page === "settings") {
+      html =
+        views.settings(state) + publishingSettings(await publishing.load());
+    } else if (page === "data") {
+      const result = await request(
+        `/api/data?page=${dataPage}&q=${encodeURIComponent(q)}&decision=${encodeURIComponent(decision)}&batch=${encodeURIComponent(dataBatch)}&category=${encodeURIComponent(dataCategory)}`,
+      );
+      if (!current()) return;
+      dataPage = result.page;
+      html = views.data(state, result, q, decision, dataBatch, dataCategory);
+    } else if (page === "runs")
+      html = views.runs(state, await request("/api/attempts"));
+    else html = views[page](state);
+    if (!current()) return;
+    content.innerHTML = html;
+    content.querySelectorAll(".table-wrap").forEach((el) => {
+      el.tabIndex = 0;
+      el.setAttribute("aria-label", "数据表格，可横向滚动查看");
+    });
+    if (page !== "community")
+      content.querySelectorAll("table:not(.matrix-table)").forEach((table) => {
+        table.classList.add("workspace-records");
+        const labels = [...table.querySelectorAll("thead th")].map((th) =>
+          th.textContent.trim(),
+        );
+        table.querySelectorAll("tbody tr").forEach((row) =>
+          [...row.children].forEach((cell, index) => {
+            if (!cell.hasAttribute("colspan") && labels[index])
+              cell.dataset.label = labels[index];
+          }),
+        );
+      });
+    if (page === "community" && community.filters.drawer) community.draw();
+  } catch (ex) {
+    if (!current()) return;
+    content.innerHTML = `<div class="empty"><h2>暂时无法读取${e(route[2])}</h2><p>${e(ex.message)}</p><button class="button" data-action="refresh">重新读取</button></div>`;
+    throw ex;
+  }
 }
 async function refresh(show = false) {
   if (loading) return;
@@ -158,6 +188,7 @@ function showForm(html) {
   if (!dialog.open) dialog.showModal();
 }
 async function action(name, id) {
+  if (shell.handle(name)) return;
   if (name === "close-dialog") return dialog.close();
   if (name === "refresh") return refresh(true);
   if (name.startsWith("pub-")) return publishing.handle(name, id);
@@ -354,7 +385,11 @@ document.addEventListener("submit", async (event) => {
     decision = form.elements.decision.value;
     dataBatch = form.elements.batch.value;
     dataPage = 1;
-    await render();
+    try {
+      await render();
+    } catch (ex) {
+      toast(ex.message, true);
+    }
     return;
   }
   setBusy(true);
@@ -405,6 +440,7 @@ window.addEventListener("hashchange", () => {
   if (state) render().catch((ex) => toast(ex.message, true));
 });
 document.addEventListener("keydown", (event) => {
+  if (event.key === "Escape") shell.escape();
   if (page !== "community") return;
   if (
     event.key === "/" &&
@@ -415,12 +451,6 @@ document.addEventListener("keydown", (event) => {
   ) {
     event.preventDefault();
     document.querySelector("#community-search")?.focus();
-  }
-  if (event.key === "Escape") {
-    document.body.classList.remove("community-menu-open");
-    document
-      .querySelector(".community-mobile-menu")
-      ?.setAttribute("aria-expanded", "false");
   }
 });
 function syncCommunityOnReturn() {
