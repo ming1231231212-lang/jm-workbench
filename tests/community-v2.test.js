@@ -111,6 +111,20 @@ test("today progress does not borrow yesterday totals", () => {
   assert.equal(planProgress(plan, "2026-10-04").reply.submitted, 2);
   assert.equal(planProgress(plan, "2026-10-05").reply.submitted, 0);
 });
+test("article-only goals and historical goals stay separate", () => {
+  const p={...plan,payload:{...plan.payload,replies_per_day:0}};
+  assert.equal(planProgress(p,"2026-10-06").replyGoal,0);
+  p.days=[{day:"2026-10-05",reply_goal:5,next_check:123}];
+  assert.equal(planProgress(p,"2026-10-05").replyGoal,5);
+  assert.equal(planProgress(p,"2026-10-05").nextCheck,123);
+});
+
+test("plan list exposes next check and zero reply goal", () => {
+  const p={...plan,payload:{...plan.payload,name:"Test",board:"ai",hour:10,minute:0,replies_per_day:0},days:[],next_action_at:1791279000,next_action:"重新检查素材、目标与账号连接"};
+  const html=workspace({...data,plans:[p],posts:[],summary:{day:"2026-10-06"}}, {tab:"plans",selected:new Set()});
+  assert.ok(html.includes("评论 <b>0/0</b>"));
+  assert.ok(html.includes("重新检查素材、目标与账号连接") && html.includes("北京时间"));
+});
 test("unknown overrides accepted and receipts do not imply visible", () => {
   assert.equal(
     postStatus({

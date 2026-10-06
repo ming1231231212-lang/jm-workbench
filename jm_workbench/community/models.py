@@ -144,6 +144,7 @@ class DailyPlan(BaseModel):
     rules_note: str = Field(min_length=12,max_length=1000)
     hour: int = Field(default=10,ge=0,le=20)
     minute: int = Field(default=0,ge=0,le=59)
+    replies_per_day: int = Field(default=5,ge=0,le=5)
     topics: list[DailyTopic] = Field(default_factory=list,max_length=60)
     replies: list[ReplyMaterial] = Field(default_factory=list,max_length=100)
     reply_rules: list[ReplyRule] = Field(default_factory=list,max_length=60)

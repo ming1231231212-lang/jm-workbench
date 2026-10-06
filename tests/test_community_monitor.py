@@ -146,6 +146,14 @@ def test_new_submission_is_a_meaningful_change():
     assert monitor.change_signature(monitor.analyse(raw, NOW)) != before
 
 
+def test_paused_existing_plan_and_missing_today_are_not_silent():
+    raw=sample()
+    raw['community']['plans']=[dict(id='p',state='paused',message='配置已保存，待启用',payload={'name':'Plan'},days=[{'day':'2026-10-03'}])]
+    assert monitor.analyse(raw,NOW)['issues'][0]['key']=='plan:p'
+    raw['community']['plans'][0].update(state='enabled',message='enabled')
+    assert monitor.analyse(raw,NOW)['issues'][0]['key']=='plan-stalled:p'
+
+
 def test_draft_is_visible_but_never_counted_as_submitted():
     raw = sample()
     raw['community']['posts'] = [{'id': 'draft', 'state': 'draft', 'updated': NOW, 'jobs': [],

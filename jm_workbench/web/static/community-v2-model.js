@@ -67,6 +67,8 @@ export function planProgress(plan, day) {
     reply: { submitted: 0, waiting: 0, failed: 0, ...d?.counts?.reply },
     message: d?.message || "今天尚未安排",
     state: d?.state || "",
+    replyGoal: d?.reply_goal ?? plan.payload.replies_per_day ?? 5,
+    nextCheck: d?.next_check || 0,
   };
 }
 export function postStatus(post) {

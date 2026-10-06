@@ -237,6 +237,7 @@ export class CommunityWorkspace extends CommunityUI {
         rules_note: "",
         hour: 10,
         minute: 0,
+        replies_per_day: 5,
         source_boards: [],
         topics: [],
         replies: [],
@@ -260,6 +261,8 @@ export class CommunityWorkspace extends CommunityUI {
       if (f.elements[key]) d[key] = f.elements[key].value.trim();
     if (f.elements.wizard_platform)
       this.wizard.platform = f.elements.wizard_platform.value;
+    if (f.elements.replies_per_day)
+      d.replies_per_day = Number(f.elements.replies_per_day.value);
     if (f.elements.source_boards)
       d.source_boards = f.elements.source_boards.value
         .split(/[,，]/)
@@ -355,7 +358,7 @@ export class CommunityWorkspace extends CommunityUI {
           "time",
           'required max="20:59"',
         ) +
-        `<div class="detail-stats"><div class="detail-stat"><span>每日帖子</span><strong>1 <small>篇</small></strong></div><div class="detail-stat"><span>每日评论</span><strong>5 <small>个不同原帖</small></strong></div></div><div class="wizard-review"><h3>${e(d.name)}</h3><p>${e(a?.name)} · ${e(d.board)}</p><p>已有帖子素材 ${d.topics.length} 篇 · 指定帖评论 ${d.replies.length} 条 · 匹配规则 ${d.reply_rules.length} 条</p></div><div class="source-summary">每个原帖只评论一次，间隔至少 30 分钟。保存后可从计划详情补充素材；素材不足时保留缺口，不重复凑数。</div>${risk ? `<div class="detail-alert red"><strong>平台暂停，暂不可启用</strong>${e(risk.reason)}</div>` : ""}`;
+        `<div class="detail-stats"><div class="detail-stat"><span>每日帖子</span><strong>1 <small>篇</small></strong></div><div class="detail-stat"><span>每日评论</span><strong>${d.replies_per_day ?? 5} <small>个不同原帖</small></strong></div></div>${select("每日自动评论", "replies_per_day", [0,1,2,3,4,5].map(n=>[String(n), n ? n+" 个不同原帖" : "关闭，只自动发帖子"]), String(d.replies_per_day ?? 5))}<p class="form-note">关闭评论不会停止文章计划。请按平台规则设置。</p><div class="wizard-review"><h3>${e(d.name)}</h3><p>${e(a?.name)} · ${e(d.board)}</p><p>已有帖子素材 ${d.topics.length} 篇 · 指定帖评论 ${d.replies.length} 条 · 匹配规则 ${d.reply_rules.length} 条</p></div><div class="source-summary">每个原帖只评论一次，间隔至少 30 分钟。保存后可从计划详情补充素材；素材不足时保留缺口，不重复凑数。</div>${risk ? `<div class="detail-alert red"><strong>平台暂停，暂不可启用</strong>${e(risk.reason)}</div>` : ""}`;
     this.showForm(
       `<form id="com-v2-wizard" data-id="${e(w.id)}"><div class="dialog-header"><div><h2 id="dialog-title">${w.id ? "修改" : "新建"}发布计划</h2><p>分三步设置，每一步只处理一件事。</p></div>${b(icon("x"), "close-dialog", "", "icon-button")}</div><div class="wizard-steps">${["平台与账号", "内容与目标", "执行安排"].map((s, i) => `<div class="wizard-step ${i + 1 === w.step ? "current" : i + 1 < w.step ? "done" : ""}"><b>${i + 1}</b>${s}</div>`).join("")}</div><div class="form-error" id="com-v2-form-error" role="alert" tabindex="-1" hidden></div>${body}<div class="dialog-footer">${w.step > 1 ? b("上一步", "com-v2-wizard-back") : b("取消", "close-dialog")}${w.step === 3 ? '<button class="button" name="finish" value="save">保存设置</button><button class="button primary" name="finish" value="enable" ' + (risk || !a || connectionStatus(a).key !== "connected" ? 'disabled title="先完成账号连接并处理平台暂停"' : "") + ">保存并启用</button>" : '<button class="button primary" name="finish" value="next">下一步 ' + icon("arrow-right") + "</button>"}</div></form>`,
     );

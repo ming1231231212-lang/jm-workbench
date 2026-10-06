@@ -9,7 +9,7 @@ from contextlib import nullcontext
 from pathlib import Path
 from ..core.db import dumps, uid
 from ..core.config import revision
-from .adapters import CommunityAdapter, NotSubmitted, PreflightStopped
+from .adapters import CommunityAdapter, NotSubmitted, PreflightStopped, RetryablePreflight, IdentityChanged
 from .registry import PLATFORMS, platform, destination, compose_url, safe_post_url, tieba_thread_url, thread_url
 from .secrets import seal, unseal
 
@@ -105,17 +105,18 @@ class Community:
         a=self.account(ident,True)
         if not a['enabled']:raise ValueError('请先启用此账号')
         try:identity=self.adapter.check(a,a['_secret'])
+        except IdentityChanged:raise
         except Exception as ex:
             message=str(ex) if isinstance(ex,NotSubmitted) else '账号检查未完成，请确认登录、API权限或网络'
             raise ValueError(message) from None
         if a['identity'] and a['identity']!=identity:
-            raise ValueError('登录身份已变化，请重新配置账号；不能替换原任务的身份')
+            raise IdentityChanged('登录身份已变化，请重新配置账号；不能替换原任务的身份')
         with self.store.connect(True) as db:
             current=db.execute('SELECT version,identity FROM community_accounts WHERE id=?',(ident,)).fetchone()
             if not current or current['version']!=a['version']:
-                raise ValueError('核验期间账号配置已改变，请重新检查')
+                raise IdentityChanged('核验期间账号配置已改变，请重新检查')
             if current['identity'] and current['identity']!=identity:
-                raise ValueError('登录身份已变化，请重新配置账号；不能替换原任务的身份')
+                raise IdentityChanged('登录身份已变化，请重新配置账号；不能替换原任务的身份')
             db.execute('UPDATE community_accounts SET identity=?,checked=? WHERE id=?',(identity,self.clock(),ident))
             # Preserve historical web registration while binding its content claims to the verified identity.
             db.execute('INSERT OR IGNORE INTO community_claims SELECT platform,?,scope,value,job_id,created FROM community_claims WHERE platform=? AND identity=?',(identity,a['platform'],'manual:'+ident))
@@ -346,25 +347,35 @@ class Community:
             recent=list(db.execute("SELECT CASE WHEN started>0 THEN started WHEN state='recorded' THEN updated ELSE 0 END AS started FROM community_jobs WHERE platform=? AND (CASE WHEN started>0 THEN started WHEN state='recorded' THEN updated ELSE 0 END)>? ORDER BY started DESC",(p,now-86400)))
             limit=6 if p in ('tieba','juejin','csdn') else 5
             due=max((recent[0]['started']+1800 if recent else now),(recent[limit-1]['started']+86400 if len(recent)>=limit else now))
+            wait_reason='30分钟发布间隔'
+            if len(recent)>=limit and recent[limit-1]['started']+86400>now:wait_reason='滚动24小时共享额度'
             if p in ('tieba','juejin','csdn'):
                 midnight=datetime.fromtimestamp(now,SHANGHAI).replace(hour=0,minute=0,second=0,microsecond=0)
                 today=list(db.execute("SELECT snapshot FROM community_jobs WHERE platform=? AND (started>=? OR (state='recorded' AND updated>=?))",(p,midnight.timestamp(),midnight.timestamp())))
                 kind=s['payload'].get('kind','thread')
                 used=sum(json.loads(r['snapshot'])['payload'].get('kind','thread')==kind for r in today)
-                if used>=(1 if kind=='thread' else 5):due=max(due,(midnight+timedelta(days=1)).timestamp())
+                if used>=(1 if kind=='thread' else 5):
+                    due=max(due,(midnight+timedelta(days=1)).timestamp());wait_reason='当日分类额度'
             if due>now:
-                db.execute("UPDATE community_jobs SET due=?,message='等待平台共享发布间隔/每日额度' WHERE id=?",(due,job['id']));return
+                message='等待'+wait_reason+'；预计北京时间 '+datetime.fromtimestamp(due,SHANGHAI).strftime('%m-%d %H:%M:%S')
+                # All platform queues share the same rolling budget and minimum interval.
+                if wait_reason!='当日分类额度':
+                    db.execute("UPDATE community_jobs SET due=MAX(due,?),message=? WHERE platform=? AND state='queued' AND due<=?",(due,message,p,due))
+                else:db.execute('UPDATE community_jobs SET due=?,message=? WHERE id=?',(due,message,job['id']))
+                return
             db.execute("UPDATE community_jobs SET state='running',started=?,updated=?,message='正在检查账号并提交' WHERE id=?",(now,now,job['id']))
         receipt={}
         try:
             a=self.account(job['account_id'],True)
             # Any failure during this read-only stage is definitively no submission.
             try:
+                if hasattr(self.adapter,'ensure_connection'):self.adapter.ensure_connection(a)
                 identity=self.adapter.check(a,a['_secret'])
-                if identity!=s['account']['identity']:raise NotSubmitted('登录身份已变化，未提交')
+            except IdentityChanged:raise
             except Exception:
-                raise PreflightStopped('账号预检失败或身份变化，未提交；请检查登录和授权') from None
-            if self.shutdown.is_set():raise NotSubmitted('服务正在停止，尚未提交')
+                raise RetryablePreflight('原账号连接或登录预检尚未完成，未提交；将自动重查，网页验证需本人完成') from None
+            if identity!=s['account']['identity']:raise IdentityChanged('登录身份已变化，未提交；请检查原账号')
+            if self.shutdown.is_set():raise RetryablePreflight('服务正在停止，尚未提交；恢复后继续检查')
             current=self.store.rows('SELECT message FROM community_jobs WHERE id=?',(job['id'],))[0]
             if current['message'] in ('stop_requested','cancel_requested'):raise InterruptedError(current['message'])
             receipt=self.adapter.publish(a,a['_secret'],s['payload'],s['destination'])
@@ -373,6 +384,10 @@ class Community:
             status,message='submitted','平台已接收 · 公开可见性未核验'
         except InterruptedError as ex:
             status,message=('cancelled' if str(ex)=='cancel_requested' else 'paused'),'用户已停止，未提交'
+        except RetryablePreflight as ex:
+            status,message='queued',str(ex)
+            old=json.loads(job['receipt']);attempt=old.get('retry_attempt',0)+1
+            receipt={'phase':'preflight','submitted':False,'retry_attempt':attempt}
         except PreflightStopped as ex:
             status,message='failed',str(ex)
             receipt={'phase':'preflight','submitted':False}
@@ -381,9 +396,22 @@ class Community:
         except Exception:
             status,message='unknown','提交结果不明，已暂停此平台；请到网站核实，禁止自动重发'
         with self.store.connect(True) as db:
+            if status=='queued':
+                current=db.execute('SELECT message FROM community_jobs WHERE id=?',(job['id'],)).fetchone()
+                plan=db.execute('SELECT p.state FROM community_plan_items i JOIN community_plans p ON p.id=i.plan_id WHERE i.post_id=?',(job['post_id'],)).fetchone()
+                if current['message'] in ('stop_requested','cancel_requested') or (plan and plan['state']!='enabled') or db.execute('SELECT 1 FROM community_risk WHERE platform=?',(p,)).fetchone():
+                    status='cancelled' if current['message']=='cancel_requested' else 'paused'
+                    message='已停止，未提交；自动恢复不会覆盖停止操作'
+                else:
+                    due=self.clock()+min(1800,300*2**min(receipt['retry_attempt']-1,3))
+                    message+='；下次北京时间 '+datetime.fromtimestamp(due,SHANGHAI).strftime('%m-%d %H:%M:%S')
+                    db.execute('UPDATE community_jobs SET due=? WHERE id=?',(due,job['id']))
+                    db.execute("UPDATE community_jobs SET due=MAX(due,?),message=? WHERE account_id=? AND state='queued' AND due<=?",(due,message,job['account_id'],due))
+                    db.execute("UPDATE community_plan_checks SET next_check=MAX(next_check,?) WHERE next_check>0 AND plan_id IN (SELECT id FROM community_plans WHERE json_extract(payload,'$.account_id')=?)",(due,job['account_id']))
             db.execute('UPDATE community_jobs SET state=?,receipt=?,message=?,updated=? WHERE id=?',(status,dumps(receipt),message,self.clock(),job['id']))
-            if status=='failed' and receipt.get('phase')=='preflight':
+            if receipt.get('phase')=='preflight' and receipt.get('submitted') is False:
                 db.execute('UPDATE community_jobs SET started=0 WHERE id=?',(job['id'],))
+            if status=='failed' and receipt.get('phase')=='preflight':
                 db.execute("UPDATE community_jobs SET state='paused',message=? WHERE platform=? AND state='queued'",(message,p))
                 db.execute("UPDATE community_plans SET state='paused',message=?,updated=? WHERE state='enabled' AND json_extract(payload,'$.account_id') IN (SELECT id FROM community_accounts WHERE json_extract(data,'$.platform')=?)",(message,self.clock(),p))
             elif status in ('unknown','failed'):self.lock_platform(p,message,db)

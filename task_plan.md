@@ -198,3 +198,12 @@ Next Step：等待用户完成Reddit真人验证和登录，再核对r/SideProje
 4. 备份部署与生产检查 — complete：20张业务表及运行配置一致，15项生产只读检查通过；守护healthy。发现并恢复SAU依赖服务，3个原发布账号可读。GitHub推送及CI回执保存于outputs/unified-ui-20261004。
 
 Next Step：本輪功能与正式运行检查完成，后续模块迭代沿用workspace共用样式和三组浏览器验收。
+
+## 2026-10-06：修复社区计划反复不执行
+
+1. 真实状态核验 — complete。贴吧受滚动24小时预算等待，评论缺口当天不再重查；掘金整体暂停连带阻断文章。
+2. 持久准备恢复、评论目标独立配置、缺口补充、具体等待时间与只读巡检 — complete。
+3. 409 Python / 64 Node回归、38项专用Chrome隔离功能验收 — complete。
+4. 备份部署、当前计划修正和正式界面验证 — pending。
+
+Next Step：完成隔离Chrome验收后部署。设计见docs/community-reliability.md，真实证据放outputs/community-reliability-20261006。

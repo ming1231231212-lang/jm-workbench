@@ -97,11 +97,22 @@ def analyse(raw, now):
                              'checked_at': local_time(account.get('checked', 0))})
         for plan in community.get('plans', []):
             plans.append({'name': plan.get('payload', {}).get('name', plan['id']),
-                          'state': plan['state'], 'message': plan.get('message', '')})
-            if plan['state'] == 'paused' and not plan.get('message', '').startswith(('用户', '配置已保存')):
+                          'state': plan['state'], 'message': plan.get('message', ''),
+                          'next_action_at':local_time(plan.get('next_action_at',0)), 'next_action':plan.get('next_action','')})
+            is_new_draft=not plan.get('days') and plan.get('message','').startswith('配置已保存')
+            if plan['state'] == 'paused' and not plan.get('message', '').startswith('用户') and not is_new_draft:
                 issue('plan:' + plan['id'], 'warning', plans[-1]['name'] + '：' + plan.get('message', '计划暂停'))
             elif plan['state'] == 'enabled' and '不足' in plan.get('message', ''):
                 issue('plan:' + plan['id'], 'warning', plans[-1]['name'] + '：' + plan['message'])
+            if plan['state']=='enabled' and 'days' in plan:
+                today=datetime.fromtimestamp(now,SHANGHAI).date().isoformat()
+                d=next((d for d in plan.get('days',[]) if d['day']==today),None)
+                payload=plan.get('payload',{})
+                start=datetime.fromtimestamp(now,SHANGHAI).replace(hour=payload.get('hour',10),minute=payload.get('minute',0),second=0,microsecond=0).timestamp()
+                if not d and now>start+900:
+                    issue('plan-stalled:'+plan['id'],'error',plans[-1]['name']+'超过安排时间15分钟，仍无今日记录，请检查执行器。')
+                elif d and d.get('state')=='waiting':
+                    issue('plan-wait:'+plan['id'],'warning',plans[-1]['name']+'连接待恢复；下次检查 '+local_time(d.get('next_check',0)))
         seen_content, seen_target = {}, {}
         account_lookup = {a['id']: a for a in community.get('accounts', [])}
         for post in community.get('posts', []):

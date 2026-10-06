@@ -78,11 +78,11 @@ def test_revision_change_stops_daily_generation(ctx):
     assert s.daily.get(p)['state']=='paused' and not s.state()['posts']
 
 
-def test_crash_during_preparation_does_not_start_partial_jobs(ctx):
+def test_crash_during_preparation_resumes_committed_jobs_without_recreation(ctx):
     p=setup_plan(ctx);s,f,_,_=ctx;s.daily.prepare(p)
     with s.store.connect(True) as db:db.execute("UPDATE community_plan_days SET state='preparing'")
-    s.recover();s.tick();assert not f.sent and s.daily.get(p)['state']=='paused'
-    assert s.state()['plans'][0]['days'][0]['state']=='error'
+    s.recover();s.tick();assert len(f.sent)==1 and s.daily.get(p)['state']=='enabled'
+    assert len(s.state()['posts'])==6 and s.state()['plans'][0]['days'][0]['state']=='planned'
 
 
 def test_duplicate_material_is_rolled_back_without_orphan_draft(ctx):

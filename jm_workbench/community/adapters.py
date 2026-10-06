@@ -20,6 +20,14 @@ class PreflightStopped(NotSubmitted):
     """Local read-only preparation stopped before the submission helper was called."""
 
 
+class RetryablePreflight(PreflightStopped):
+    """Temporary failure in a proven read-only stage; no submit call occurred."""
+
+
+class IdentityChanged(PreflightStopped):
+    """Never retry or replace the account identity automatically."""
+
+
 class NoRedirect(urllib.request.HTTPRedirectHandler):
     def redirect_request(self, *args, **kwargs):
         return None
@@ -78,9 +86,9 @@ def tieba_wait_identity(page,expected,timeout=10000):
     while True:
         try:actual=tieba_identity(page)
         except NotSubmitted:
-            if time.monotonic()>=deadline:raise PreflightStopped('新页面登录状态未就绪，尚未填写或提交；请检查账号页面') from None
+            if time.monotonic()>=deadline:raise RetryablePreflight('新页面登录状态未就绪，尚未填写或提交；请检查账号页面') from None
             page.wait_for_timeout(200);continue
-        if actual!=expected:raise PreflightStopped('新页面登录身份不一致，未提交')
+        if actual!=expected:raise IdentityChanged('新页面登录身份不一致，未提交')
         return actual
 
 
@@ -216,6 +224,16 @@ def tieba_reply_and_submit(page,payload,expected,target):
     return tieba_reply_receipt(response.json(),target)
 
 
+def fair_candidates(buckets,limit=18):
+    """Round robin bounded source lists so the first board cannot crowd out others."""
+    result=[]
+    for index in range(max((len(b) for b in buckets),default=0)):
+        for bucket in buckets:
+            if index<len(bucket) and bucket[index] not in result:result.append(bucket[index])
+            if len(result)>=limit:return result
+    return result
+
+
 class CommunityAdapter:
     def __init__(self, config, transport=http_json):
         self.config,self.transport=config,transport
@@ -258,18 +276,21 @@ class CommunityAdapter:
             browser=pw.chromium.connect_over_cdp(endpoint(account['profile_dir']),timeout=10000)
             context=browser.contexts[0]
             if tieba_existing_identity(context)!=account['identity']:raise NotSubmitted('候选读取前身份变化')
-            page=context.new_page();links=[];result=[]
+            page=context.new_page();links=[];result=[];buckets=[]
             try:
                 for board in boards:
+                    board_links=[]
                     page.goto(compose_url('tieba',board),wait_until='domcontentloaded',timeout=15000)
                     page.locator('.pc-main-page-layout').wait_for(timeout=8000)
                     for _ in range(2):
                         page.mouse.wheel(0,850);page.wait_for_timeout(500)
-                        for value in page.locator('a[href*="/p/"]').evaluate_all('(xs)=>xs.filter(x=>x.innerText.length>12).map(x=>x.href)'):
+                        for value in page.locator('a[href*="/p/"]').evaluate_all('(xs)=>xs.filter(x=>x.innerText.trim().length>=4).map(x=>x.href)'):
                             try:url=tieba_thread_url(value)
                             except ValueError:continue
-                            if url not in links:links.append(url)
-                        if len(links)>=18:break
+                            if url not in board_links:board_links.append(url)
+                        if len(board_links)>=18:break
+                    buckets.append(board_links[:18])
+                links=fair_candidates(buckets)
                 for url in links[:18]:
                     try:
                         page.goto(url,wait_until='domcontentloaded',timeout=15000)
@@ -336,6 +357,18 @@ class CommunityAdapter:
         subprocess.Popen([str(chrome),f'--user-data-dir={p}','--remote-debugging-port=0','--no-first-run','--no-default-browser-check',url],stdout=subprocess.DEVNULL,stderr=subprocess.DEVNULL)
         return {'message':'已打开此账号的独立Chrome，请完成登录'}
 
+    def ensure_connection(self, account):
+        """Restore only the bound local profile, never a different account/IP."""
+        if account['platform'] not in ('tieba','juejin','csdn'):return
+        try:endpoint(account['profile_dir']);return
+        except LocalBrowserError:pass
+        self.open(account,platform(account['platform'])['home'])
+        for _ in range(20):
+            time.sleep(.5)
+            try:endpoint(account['profile_dir']);return
+            except LocalBrowserError:pass
+        raise RetryablePreflight('原账号Chrome尚未连接，将延时重查；登录验证仍需在网页完成')
+
     def tieba(self, account, payload, target):
         from playwright.sync_api import sync_playwright
         try:ws=endpoint(account['profile_dir'])
@@ -353,7 +386,7 @@ class CommunityAdapter:
                     page.locator('.pc-main-page-layout').wait_for(state='visible',timeout=10000)
                     tieba_wait_identity(page,account['identity'])
                 except PreflightStopped:raise
-                except Exception:raise PreflightStopped('账号页面加载未完成，尚未调用发布操作') from None
+                except Exception:raise RetryablePreflight('账号页面加载未完成，尚未调用发布操作') from None
                 if payload.get('kind')=='reply':
                     return tieba_reply_and_submit(page,payload,account['identity'],target)
                 return tieba_fill_and_submit(page,payload,account['identity'],target)

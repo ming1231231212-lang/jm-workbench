@@ -93,7 +93,8 @@ def test_discovery_wrong_platform_rejected_without_send(setup):
     d['reply_rules']=[{'name':'Skill检查','terms':['Skill','输出'],'body':'AI辅助整理：建议先保留同一份最小输入，再核对输出约束及依赖，记录实际失败的位置。','require_question':False}]
     f.discover=lambda *args:[{'url':'https://tieba.baidu.com/p/123456','title':'Skill输出','excerpt':'Skill的输出如何检查，这是原文内容。'}]
     p=s.daily.save(DailyPlan(**d))['id'];s.daily.control(p,'enable');s.daily.prepare(p)
-    assert s.daily.get(p)['state']=='paused' and not f.sent
+    assert s.daily.get(p)['state']=='enabled' and not f.sent and not s.state()['posts']
+    assert '已丢弃' in s.daily.get(p)['message']
 
 
 def test_historical_web_claim_is_bound_without_changing_snapshot(setup):
