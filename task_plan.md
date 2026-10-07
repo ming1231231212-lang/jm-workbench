@@ -204,6 +204,6 @@ Next Step：本輪功能与正式运行检查完成，后续模块迭代沿用wo
 1. 真实状态核验 — complete。贴吧受滚动24小时预算等待，评论缺口当天不再重查；掘金整体暂停连带阻断文章。
 2. 持久准备恢复、评论目标独立配置、缺口补充、具体等待时间与只读巡检 — complete。
 3. 409 Python / 64 Node回归、38项专用Chrome隔离功能验收 — complete。
-4. 备份部署、当前计划修正和正式界面验证 — pending。
+4. 备份部署、当前计划修正和正式界面验证 — complete。26条历史记录保持不变，真实服务停止后约30.2秒自动恢复，28条任务状态不变；正式界面4项检查通过。
 
-Next Step：完成隔离Chrome验收后部署。设计见docs/community-reliability.md，真实证据放outputs/community-reliability-20261006。
+Next Step：本轮修复完成；10月7日直接从工作台回执确认两平台文章已自动执行，贴吧评论仍按缺口补查。设计见docs/community-reliability.md，真实证据放outputs/community-reliability-20261006。
