@@ -212,9 +212,13 @@ Next Step：本轮修复完成；10月7日直接从工作台回执确认两平�
 ## 2026-10-08：Windows 10/11 x64 免安装交付
 
 1. 独立 worktree 依赖与许可审计 — complete。
-2. 便携启动、退出、环境检查、独立用户数据、简化视频账号管理 — implemented。
-3. 白名单构建、官方运行时校验、浏览器文件核对 — in progress。
-4. 源码回归、最终包验收、全新 Windows CI — pending。
-5. GitHub 分支及 Release ZIP 上传、远程校验 — pending。
+2. 便携启动、退出、环境检查、独立用户数据、简化视频账号管理 — complete。
+3. 白名单构建、官方运行时校验、浏览器文件核对 — complete。
+4. 源码回归、最终包验收、全新 Windows CI — complete：417 Python、64 JS、80浏览器、46发行包、8搬动检查通过。
+5. GitHub 分支及 Release ZIP 上传、远程校验 — complete：v1.1.0，366409707字节；GitHub服务器SHA256与本地一致，临时分片已移除。
 
 生产服务和每日计划保持原目录运行。MediaCrawler 不随包分发；平台登录与公开可见性需接收者账号核验。
+
+下载：https://github.com/ming1231231212-lang/jm-workbench/releases/tag/v1.1.0 。仓库保持私有。最终ZIP在工作台“资料归档/项目发布包/JM工作台”中；测试报告、原始验收和上传回执在outputs/windows-release-20261008。
+
+本机实测Windows 11 x64，独立CI为Windows Server 2025；Windows 10未做真机验收。最新源码CI 37716784019、Windows构建验收37716783944、精确ZIP合并校验37716783973均成功。未进行真实平台发布。
