@@ -1,0 +1,20 @@
+name: Assemble verified Windows release
+on:
+  push:
+    branches: ['codex/windows-portable-*']
+    paths: ['packaging/release-upload-manifest.json', '.github/workflows/assemble-windows-release.yml', 'packaging/assemble_release.py']
+permissions:
+  contents: write
+jobs:
+  assemble:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    env:
+      GH_TOKEN: ${{ github.token }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.13'
+      - name: Verify all uploaded parts and assemble exact tested ZIP
+        run: python packaging/assemble_release.py

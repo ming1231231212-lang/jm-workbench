@@ -1,0 +1,83 @@
+{
+  "tag": "v1.1.0",
+  "asset": "JMWorkbench-v1.1.0-windows-x64.zip",
+  "bytes": 366409707,
+  "sha256": "7f040954eb897398e466d7d37cd095c28f226dcb6759de53726daa2ed23b3754",
+  "parts": [
+    {
+      "name": "jm-v1.1.0-upload-part-00.bin",
+      "bytes": 25165824,
+      "sha256": "fcf3a3168b3eb4b3c8de1ea0fc003f5560709c135d913f7b99cf75d78ec2c132"
+    },
+    {
+      "name": "jm-v1.1.0-upload-part-01.bin",
+      "bytes": 25165824,
+      "sha256": "0cf34e43e0b6772b2300b631002180951db64f78bdbbde3a2db35f82828e62e2"
+    },
+    {
+      "name": "jm-v1.1.0-upload-part-02.bin",
+      "bytes": 25165824,
+      "sha256": "ce587931981ed1f15de191ca37664cca40dc3ed9093392032ad673664e2bb611"
+    },
+    {
+      "name": "jm-v1.1.0-upload-part-03.bin",
+      "bytes": 25165824,
+      "sha256": "24f7c03933f6c6c71e869a1bdc27600251b594c3af3c199d206497ba42d5eb58"
+    },
+    {
+      "name": "jm-v1.1.0-upload-part-04.bin",
+      "bytes": 25165824,
+      "sha256": "8a2c459e3fa3278ec9161ad3c58194db65a5bb7c7484fb9659d70d85783e0990"
+    },
+    {
+      "name": "jm-v1.1.0-upload-part-05.bin",
+      "bytes": 25165824,
+      "sha256": "a2ffa5ed7dfabb89a7e42116fe9a33f6c0fe8116b33a08316d6b8593c565fb2d"
+    },
+    {
+      "name": "jm-v1.1.0-upload-part-06.bin",
+      "bytes": 25165824,
+      "sha256": "e8f9374a5f502bacc42a79c0eea403a4bf815b891b5ccfafbbf59bec8e4719ce"
+    },
+    {
+      "name": "jm-v1.1.0-upload-part-07.bin",
+      "bytes": 25165824,
+      "sha256": "a7f3a4b439bfa3108df3e16287d65d928777f1f6043f88a34cb940eefb7d04e1"
+    },
+    {
+      "name": "jm-v1.1.0-upload-part-08.bin",
+      "bytes": 25165824,
+      "sha256": "8ce103102e50906f9c287774240ba26897526569ee868ea946b57540fe7657c0"
+    },
+    {
+      "name": "jm-v1.1.0-upload-part-09.bin",
+      "bytes": 25165824,
+      "sha256": "fe7cfeb0f9ef439a18a30eaba777c83b36caec789c756646b7b5750cc78b04c5"
+    },
+    {
+      "name": "jm-v1.1.0-upload-part-10.bin",
+      "bytes": 25165824,
+      "sha256": "67db0abfd9700b9b58b1066ba2cdb278b3d9e6f11d9c843eaedbb0ac11255f47"
+    },
+    {
+      "name": "jm-v1.1.0-upload-part-11.bin",
+      "bytes": 25165824,
+      "sha256": "943cdfeea00833b8906b010624e3dfe2f6ceff2cd03fa2d0c0764e7058204a41"
+    },
+    {
+      "name": "jm-v1.1.0-upload-part-12.bin",
+      "bytes": 25165824,
+      "sha256": "6aff083d4122551cf64c6e49a36938f06f273ff97bf0c2cf429aa6b9f1492587"
+    },
+    {
+      "name": "jm-v1.1.0-upload-part-13.bin",
+      "bytes": 25165824,
+      "sha256": "0dbbd9dc8e243a799e46be40cc9e7411e658fefd19cfaff066726ca9b49796d1"
+    },
+    {
+      "name": "jm-v1.1.0-upload-part-14.bin",
+      "bytes": 14088171,
+      "sha256": "3f5db7d0c494114090a81138de247b75f60ba4468134f0b29443ab77188c6bb9"
+    }
+  ]
+}

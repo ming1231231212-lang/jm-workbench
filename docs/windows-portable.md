@@ -28,6 +28,10 @@
 
 `--refresh-source` 仅用于构建过程修改源码后的更新；最终必须再次生成文件清单并重新验收。依赖原始许可完整保留。`vendor_sau.py` 是维护用的白名单导入工具，执行前必须审核输入源码及许可；它不导入安装数据。
 
+归档使用 `packaging/archive_windows.py`：先核对所有文件 SHA256 和白名单，再生成单一 ZIP，并完成全量 ZIP CRC 检查。`scripts/verify_portable_relocation.py` 从程序包以外运行，复用测试数据检验程序目录搬动。
+
+大文件传输慢时，可用 `prepare_release_upload.py` 生成带固定哈希的临时分片，通过 `upload_release_parts.py` 最多六路上传到本次草稿 Release；`assemble_release.py` 在 GitHub Actions 中重新校验每片和整体 SHA256，只上传与本地测试 ZIP 完全相同的文件，再删除本次分片。该流程只处理草稿，不自动公开发布，也不触碰其他版本的资产。
+
 ## 功能边界
 
 本地配置、任务、模板、数据、回执、社区工作流、快手基础采集/评论与视频发布接入随包提供。其他平台采集需要外接环境；MediaCrawler 因许可证限制未随包提供。20 个社区是能力目录，未实现自动发布的平台仍按能力标记使用人工网页交接，不能宣称全平台自动发布成功。
