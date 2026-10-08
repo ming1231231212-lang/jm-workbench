@@ -229,7 +229,7 @@ Next Step：本轮修复完成；10月7日直接从工作台回执确认两平�
 
 1. 远程分支、标签全部历史和发行附件审计 — complete；55 次提交 / 478 个历史文件版本，命中均为模拟 URL 和原打包器排除规则，未发现实际凭据、账号数据库或浏览器资料。
 2. MIT 自有代码授权、第三方许可补齐、普通用户下载与贡献说明 — complete。
-3. v1.1.1 源码回归、包含许可的 Windows 实际 EXE 构建验收 — in_progress。
-4. 默认分支与 GitHub 可见性、公共 Release、匿名下载验证 — pending。
+3. v1.1.1 源码回归、包含许可的 Windows 实际 EXE 构建验收 — complete：417 Python、64 JavaScript、47 Windows 包验收通过；构建 37718683590 成功。
+4. 默认分支与 GitHub 可见性、公共 Release、匿名下载验证 — complete：仓库 public，MIT，v1.1.1 为 latest；未登录完整下载及所有文件 SHA256 / ZIP CRC 校验通过。
 
 最终证据保存在 outputs/open-source-20261008。生产服务继续使用原目录，此开源交付不调整现有业务任务。
