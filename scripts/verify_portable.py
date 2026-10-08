@@ -61,6 +61,11 @@ def main():
     check('OS is Windows x64', sys.platform == 'win32' and sys.maxsize > 2**32)
     check('Acceptance uses the embedded Python', Path(sys.executable).resolve().is_relative_to(bundle / 'runtime'))
     check('No developer Python or Node on process PATH', shutil.which('python', path=env['PATH']) is None and shutil.which('node', path=env['PATH']) is None)
+    check('JM MIT license and third-party notices are shipped',
+          'MIT License' in (bundle/'LICENSE').read_text(encoding='utf-8')
+          and (bundle/'vendor/sau/LICENSE').is_file()
+          and (bundle/'app/jm_workbench/web/static/community-icons-LICENSE.txt').is_file()
+          and (bundle/'THIRD_PARTY_NOTICES.md').is_file())
     # Hold the preferred port if no production service already owns it.
     occupied = socket.socket()
     try:

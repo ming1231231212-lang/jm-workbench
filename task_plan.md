@@ -222,3 +222,14 @@ Next Step：本轮修复完成；10月7日直接从工作台回执确认两平�
 下载：https://github.com/ming1231231212-lang/jm-workbench/releases/tag/v1.1.0 。仓库保持私有。最终ZIP在工作台“资料归档/项目发布包/JM工作台”中；测试报告、原始验收和上传回执在outputs/windows-release-20261008。
 
 本机实测Windows 11 x64，独立CI为Windows Server 2025；Windows 10未做真机验收。最新源码CI 37716784019、Windows构建验收37716783944、精确ZIP合并校验37716783973均成功。未进行真实平台发布。
+
+## 2026-10-08：公开开源与公共下载
+
+用户明确授权将仓库公开开源。
+
+1. 远程分支、标签全部历史和发行附件审计 — complete；55 次提交 / 478 个历史文件版本，命中均为模拟 URL 和原打包器排除规则，未发现实际凭据、账号数据库或浏览器资料。
+2. MIT 自有代码授权、第三方许可补齐、普通用户下载与贡献说明 — complete。
+3. v1.1.1 源码回归、包含许可的 Windows 实际 EXE 构建验收 — in_progress。
+4. 默认分支与 GitHub 可见性、公共 Release、匿名下载验证 — pending。
+
+最终证据保存在 outputs/open-source-20261008。生产服务继续使用原目录，此开源交付不调整现有业务任务。

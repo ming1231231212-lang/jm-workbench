@@ -78,7 +78,7 @@ def audit(target):
             raise ValueError(f'Private state in release: {relative}')
         if path.is_file() and relative.parts[0] in ('app', 'vendor') and path.suffix in ('.py', '.js', '.html', '.json', '.md'):
             text = path.read_text(encoding='utf-8-sig')
-            for marker in ('C:\\Users\\70942', 'D:\\BrainAgent', 'D:\\Codex', 'BDUSS=', 'STOKEN=', 'ghp_', 'github_pat_'):
+            for marker in ('C:\\Users\\', 'D:\\BrainAgent', 'D:\\Codex', 'BDUSS=', 'STOKEN=', 'ghp_', 'github_pat_'):
                 if marker in text:
                     raise ValueError(f'Private machine reference or credential marker in {relative}')
 
@@ -112,9 +112,10 @@ def main():
         (target / 'DEPENDENCIES.json').write_text(json.dumps({'python': {'file':PYTHON_FILE, 'sha256':PYTHON_SHA256,
             'source':'https://www.python.org/ftp/python/3.13.16/'}, 'wheels':wheel_manifest}, indent=2), encoding='utf-8')
     (target / 'runtime/python313._pth').write_text('python313.zip\n.\nsite-packages\n../app\nimport site\n', encoding='utf-8')
-    copy_source(ROOT / 'jm_workbench', target / 'app/jm_workbench', {'.py', '.js', '.css', '.html', '.json'})
+    copy_source(ROOT / 'jm_workbench', target / 'app/jm_workbench', {'.py', '.js', '.css', '.html', '.json', '.txt'})
     copy_source(ROOT / 'vendor/sau', target / 'vendor/sau', {'.py', '.js', '.json', '.md'})
     shutil.copyfile(ROOT / 'vendor/sau/LICENSE', target / 'vendor/sau/LICENSE')
+    shutil.copyfile(ROOT / 'LICENSE', target / 'LICENSE')
     shutil.copyfile(ROOT / 'packaging/使用说明.html', target / '使用说明.html')
     shutil.copyfile(ROOT / 'packaging/THIRD_PARTY_NOTICES.md', target / 'THIRD_PARTY_NOTICES.md')
     shutil.copyfile(ROOT / 'docs/windows-portable.md', target / '维护说明.md')

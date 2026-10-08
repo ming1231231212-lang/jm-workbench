@@ -3,10 +3,17 @@ on:
   push:
     branches: ['codex/windows-portable-*']
   workflow_dispatch:
+    inputs:
+      release_tag:
+        description: 'Optional existing draft release tag; dispatch from the same tag'
+        required: false
+        type: string
 permissions:
   contents: read
 jobs:
   portable:
+    permissions:
+      contents: write
     runs-on: windows-2025
     timeout-minutes: 30
     env:
@@ -39,6 +46,23 @@ jobs:
         run: python packaging/build_windows.py --downloads build/downloads --browser build/browser --output build/JMWorkbench
       - name: Verify actual EXE and embedded runtime without developer PATH
         run: .\build\JMWorkbench\runtime\python.exe -B scripts/verify_portable.py --bundle build/JMWorkbench --output build/acceptance
+      - name: Archive and upload the tested package to the draft release
+        if: github.event_name == 'workflow_dispatch' && inputs.release_tag != ''
+        env:
+          GH_TOKEN: ${{ github.token }}
+          RELEASE_TAG: ${{ inputs.release_tag }}
+        run: |
+          $tag = $env:RELEASE_TAG
+          if ($tag -notmatch '^v\d+\.\d+\.\d+$' -or $env:GITHUB_REF -ne "refs/tags/$tag") { throw 'Dispatch must use the release tag itself' }
+          $version = python -c "from jm_workbench import __version__; print(__version__)"
+          if ($tag -ne "v$version") { throw 'Release tag does not match source version' }
+          $release = gh release view $tag --json isDraft | ConvertFrom-Json
+          if ($LASTEXITCODE -ne 0 -or -not $release.isDraft) { throw 'Only an existing draft may receive this build' }
+          $zip = "build/JMWorkbench-$tag-windows-x64.zip"
+          python packaging/archive_windows.py --bundle build/JMWorkbench --output $zip
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          gh release upload $tag $zip "$zip.sha256" 'build/acceptance/report.json' 'LICENSE' 'packaging/THIRD_PARTY_NOTICES.md'
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
       - name: Upload sanitized test evidence
         if: always()
         uses: actions/upload-artifact@v4

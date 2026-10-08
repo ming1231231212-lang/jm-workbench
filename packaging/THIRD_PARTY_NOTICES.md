@@ -1,6 +1,6 @@
 # JM工作台 Windows 发行包：第三方组件
 
-本包保留各组件自有许可证。JM源码与发行包按本仓库已提供的授权使用，不代表各社区授予自动发帖权限。
+JM 自有源码采用 MIT 许可证，完整文本见发行包根目录 `LICENSE`。其他组件保留各自许可证，不受 JM 的 MIT 授权替代。软件许可不代表各社区授予自动发帖权限。
 
 | 组件 | 来源与许可位置 |
 |---|---|
@@ -9,6 +9,7 @@
 | Playwright / Patchright | Apache-2.0；各包中的 LICENSE、NOTICE 和浏览器第三方说明均保留 |
 | 随包 Chrome for Testing | Playwright 官方下载产物；浏览器目录内的 `ABOUT`, `LICENSE`, `chrome://credits` 和随附说明适用。优先使用已安装的 Google Chrome。未复制任何人的浏览器资料。 |
 | Social Auto Upload | https://github.com/dreammis/social-auto-upload ，MIT，Copyright (c) 2023 dreammis，完整许可见 `vendor/sau/LICENSE`；只包含接入所需源码。JM 修改记录和原始源码哈希见 `vendor/sau/UPSTREAM.json` |
+| 社区平台图标 | 原始通知见 `app/jm_workbench/web/static/community-icons-LICENSE.txt`；各平台商标权归各权利人所有。 |
 | OpenCV 的 FFmpeg 插件 | 保留 `runtime/site-packages/cv2/LICENSE-3RD-PARTY.txt` 中的 LGPL 2.1 许可。插件以独立 DLL 形式提供，允许按许可替换、逆向调试修改后的版本；对应源码和构建脚本随包保存在 `third-party-sources/`，其 SOURCES.json 固定上游提交和每份源码哈希。未使用 GPL 编码组件。 |
 | OpenCV / NumPy / Requests 等 | 原始许可与第三方通知保留在各自 dist-info 及库目录中。 |
 
