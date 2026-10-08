@@ -19,7 +19,7 @@ def public(value):
 def probe_video(path):
     executable = shutil.which('ffprobe')
     if not executable:
-        raise ValueError('未找到 ffprobe，无法验证视频文件，请先安装 FFmpeg')
+        return probe_video_embedded(path)
     try:
         result = subprocess.run([executable, '-v', 'error', '-select_streams', 'v:0', '-show_entries',
                                  'stream=codec_type,width,height:format=duration', '-of', 'json', str(path)],
@@ -32,6 +32,34 @@ def probe_video(path):
         return {'duration': round(duration, 2), 'width': int(stream['width']), 'height': int(stream['height'])}
     except (ValueError, KeyError, IndexError, OSError, subprocess.SubprocessError):
         raise ValueError('文件不是可读取的视频，或视频已损坏')
+
+
+def probe_video_embedded(path):
+    """Use the packaged decoder when a system FFprobe is not installed."""
+    try:
+        import cv2
+    except ImportError:
+        raise ValueError('未找到视频验证组件，请使用完整发行包或安装 FFmpeg')
+    capture = None
+    try:
+        capture = cv2.VideoCapture(str(path), cv2.CAP_FFMPEG,
+                                  [cv2.CAP_PROP_OPEN_TIMEOUT_MSEC, 15000, cv2.CAP_PROP_READ_TIMEOUT_MSEC, 15000])
+        if not capture.isOpened():
+            raise ValueError()
+        fps, count = capture.get(cv2.CAP_PROP_FPS), capture.get(cv2.CAP_PROP_FRAME_COUNT)
+        ok, frame = capture.read()
+        if not ok or frame is None or fps <= 0 or count <= 0:
+            raise ValueError()
+        duration = count / fps
+        import math
+        if not math.isfinite(duration) or duration <= 0:
+            raise ValueError()
+        return {'duration': round(duration, 2), 'width': int(frame.shape[1]), 'height': int(frame.shape[0])}
+    except Exception as ex:
+        raise ValueError('文件不是可读取的视频，或视频已损坏') from ex
+    finally:
+        if capture is not None:
+            capture.release()
 
 
 class Publishing:

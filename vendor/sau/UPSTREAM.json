@@ -1,0 +1,29 @@
+{
+  "project": "https://github.com/dreammis/social-auto-upload",
+  "license": "MIT",
+  "source_sha256": {
+    "LICENSE": "935fe4f7fa408998b7acb94f6a18213ef2acfe1fe980ed1ecbe6706f93d84790",
+    "sau_backend.py": "e1f9802c0974f0f091bef7718138200c4ba5d1d6e84a1ca30b756a0cf05da903",
+    "jm_publish_guard.py": "dcf5b21e3e7e2ac96b8ecb5ed4c5c65500a0319196fa2a958a19588fb895e4d7",
+    "myUtils/auth.py": "3a4a02c655418871cbdc373932eb8780fe0c9dd1477629734d831bfba9752e9c",
+    "myUtils/login.py": "0fd4c5d9d04a7328fdf3c1826dfa1eb776b50513fdae86873189060cb10799b0",
+    "myUtils/postVideo.py": "90a708a5dec16074ea6616458c9305352746b906ccc425e8b3e20c5234484670",
+    "uploader/base_video.py": "e336843eda315ae361dc66d5b1a3dd1f5141c5c04fa948bf617405a89c083055",
+    "uploader/xhs_uploader/main.py": "6b2a3183af4b97a72a26ddad650163984070a500016cf47fe9d626b2ed555f83",
+    "uploader/douyin_uploader/main.py": "540333e0f5415bf560f6e0cfcc68c7929a29c92db9f4ed8545ce860a4f93fb02",
+    "uploader/ks_uploader/main.py": "1496b8cdf57e058081a2a7ce81acf6bdbc2a9c605df3f100f7c3d362e61c5efa",
+    "uploader/tencent_uploader/main.py": "f6d05e187bb9eb613df9356ccf6f16d338412680f449476a8720d20659ca6211",
+    "uploader/xiaohongshu_uploader/main.py": "8e790d8a291a411bf98d84c0509e8e98229e9836de903d3723dda41752763e93",
+    "utils/base_social_media.py": "02f8358d92d73f5ce6ae13090013d286a436820c94eed18daaf0939aee923b36",
+    "utils/constant.py": "d4425b79244d2d7053f9070874e3e5ace604cd755a94fc3b770e5e0c240ddcb6",
+    "utils/files_times.py": "cffd8e72b67277958dc335d89e43941978d59e59f45a61292aae1a94953324fc",
+    "utils/log.py": "268747b13b7aada41f0f77b6f340fbe54578237a77fd9b7f49c017c487c5b0a8",
+    "utils/login_qrcode.py": "90905326c40e360b5bd011abcf828078691b95b3891794cb5cd1c77973283259",
+    "utils/stealth.min.js": "d29563a94d5795418231295e13ae4b21a1f337bb9a147d1b5699da32ebe3b17f"
+  },
+  "changes": [
+    "Guarded single submit via JM patch",
+    "Data and browser paths injected by portable wrapper",
+    "Static script paths follow vendor code"
+  ]
+}

@@ -70,7 +70,7 @@ class SAUBridge:
         try:
             conn.request('GET' if body is None else 'POST', path,
                          body=None if body is None else json.dumps(body).encode(),
-                         headers={'Content-Type': 'application/json'})
+                         headers={'Content-Type': 'application/json', 'X-JM-Connector-Token': os.environ.get('JM_SAU_TOKEN', '')})
             return self._response(conn)
         except (OSError, http.client.HTTPException) as ex:
             raise SAUUnavailable('内容发布服务未连接，请在设置中启动或检查 SAU') from ex
@@ -121,6 +121,7 @@ class SAUBridge:
             conn.putrequest('POST', '/uploadSave')
             conn.putheader('Content-Type', f'multipart/form-data; boundary={boundary}')
             conn.putheader('Content-Length', str(len(head) + path.stat().st_size + len(tail)))
+            conn.putheader('X-JM-Connector-Token', os.environ.get('JM_SAU_TOKEN', ''))
             conn.endheaders()
             conn.send(head)
             with path.open('rb') as stream:
@@ -152,6 +153,9 @@ class SAUBridge:
     def _start(self):
         """Start installed services only; no database initialization or publishing."""
         import socket
+        if os.environ.get('JM_BUNDLE'):
+            self.catalog()
+            return {'message': '内置视频发布服务已连接；点击账号管理登录自己的账号'}
         if os.name != 'nt':
             raise ValueError('自动启动仅支持本机 Windows 安装')
         settings = self.settings()

@@ -326,7 +326,7 @@ export class CommunityWorkspace extends CommunityUI {
           "name",
           d.name,
           "text",
-          'required maxlength="60" placeholder="例如：趣造AI · 日常分享"',
+          'required maxlength="60" placeholder="例如：AI工具 · 日常分享"',
         ) +
         field(
           w.platform === "tieba"

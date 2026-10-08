@@ -207,3 +207,14 @@ Next Step：本輪功能与正式运行检查完成，后续模块迭代沿用wo
 4. 备份部署、当前计划修正和正式界面验证 — complete。26条历史记录保持不变，真实服务停止后约30.2秒自动恢复，28条任务状态不变；正式界面4项检查通过。
 
 Next Step：本轮修复完成；10月7日直接从工作台回执确认两平台文章已自动执行，贴吧评论仍按缺口补查。设计见docs/community-reliability.md，真实证据放outputs/community-reliability-20261006。
+
+
+## 2026-10-08：Windows 10/11 x64 免安装交付
+
+1. 独立 worktree 依赖与许可审计 — complete。
+2. 便携启动、退出、环境检查、独立用户数据、简化视频账号管理 — implemented。
+3. 白名单构建、官方运行时校验、浏览器文件核对 — in progress。
+4. 源码回归、最终包验收、全新 Windows CI — pending。
+5. GitHub 分支及 Release ZIP 上传、远程校验 — pending。
+
+生产服务和每日计划保持原目录运行。MediaCrawler 不随包分发；平台登录与公开可见性需接收者账号核验。

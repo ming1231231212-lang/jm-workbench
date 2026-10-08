@@ -239,7 +239,7 @@ export function settings(s) {
       "工作台设置",
       "运行目录和依赖保存在本机。修改后新任务使用新配置。",
     ) +
-    `<form id="settings-form" class="panel form-panel">${field("Google Chrome程序路径", "chrome_path", s.settings.chrome_path, "text", "required")}${field("MediaCrawler项目目录", "crawler_root", s.settings.crawler_root, "text", "required")}${field("MediaCrawler的Python程序路径", "crawler_python", s.settings.crawler_python, "text", "required")}<div class="note">请选择已有运行环境的Python。工作台不会修改爬虫的共享配置，也不会把登录资料上传到GitHub。</div><button class="button primary">保存设置</button></form><div class="panel spaced"><div class="panel-title"><h2>执行保护</h2></div><div class="protection-grid"><div><b>读取</b><p>平台共享间隔 ≥ 5分钟，滚动24小时最多24批，08:00–23:00。</p></div><div><b>评论</b><p>平台共享间隔 ≥ 30分钟，滚动24小时最多5条，20:00–23:00内可缩短。</p></div><div><b>去重</b><p>同一视频不重复接触；同一作者和相同文本7天内不重复。</p></div><div><b>异常</b><p>账号不一致、平台限制、发送结果不确定均停发，不自动换号或重试。</p></div></div></div>`
+    `<form id="settings-form" class="panel form-panel">${field("Chrome程序路径", "chrome_path", s.settings.chrome_path, "text", "required")}<details><summary>外接爬虫（可选）</summary>${field("MediaCrawler项目目录", "crawler_root", s.settings.crawler_root, "text")}${field("MediaCrawler的Python程序路径", "crawler_python", s.settings.crawler_python, "text")}<div class="note">快手基础关键词采集可使用内置组件。其他平台或评论采集需要另行配置有使用授权的爬虫环境；MediaCrawler 未随发行包提供，其许可证限制非商业学习用途。</div></details><button class="button primary">保存设置</button></form><div class="panel spaced"><div class="panel-title"><h2>执行保护</h2></div><div class="protection-grid"><div><b>读取</b><p>平台共享间隔 ≥ 5分钟，滚动24小时最多24批，08:00–23:00。</p></div><div><b>评论</b><p>平台共享间隔 ≥ 30分钟，滚动24小时最多5条，20:00–23:00内可缩短。</p></div><div><b>去重</b><p>同一视频不重复接触；同一作者和相同文本7天内不重复。</p></div><div><b>异常</b><p>账号不一致、平台限制、发送结果不确定均停发，不自动换号或重试。</p></div></div></div>`
   );
 }
 
