@@ -30,9 +30,8 @@ try {
         if (-not $jmRunning) { throw 'JM启动失败，请查看var/server.stderr.log。' }
     }
     if (-not $NoBrowser) {
-        $jmPreferred = Join-Path (Split-Path -Parent $jmProject) 'Codex-Chrome\Open-CodexChrome.ps1'
-        if (Test-Path -LiteralPath $jmPreferred) { & $jmPreferred -Url $jmUrl }
-        else { Start-Process $jmUrl }
+        & $jmPython -m jm_workbench.adapters.local_browser $jmUrl
+        if ($LASTEXITCODE -ne 0) { throw '服务已启动，但本地Chrome未能打开，请检查工作台设置。' }
     }
     Write-Output $jmUrl
 } finally { Pop-Location }

@@ -289,7 +289,7 @@ export function drawer(data, u) {
       risk = data.risk.find((r) => r.platform === a.platform);
     return (
       drawerHead("PLATFORM ACCOUNT", a.name, p.name) +
-      `<div class="drawer-body"><div class="detail-status-row">${badge(connectionStatus(a))}</div>${a.sync_message ? `<p class="form-note">${e(a.sync_message)}</p>` : ""}${risk ? `<div class="detail-alert red"><strong>平台已暂停</strong>${e(risk.reason)}<p>重新登录或检查连接不会解除发布限制。</p>${small("处理记录", "com-risk", a.platform)}</div>` : ""}${section("账号信息", `<dl class="details-grid"><dt>备注</dt><dd>${e(a.identity_hint || "—")}</dd><dt>登录身份</dt><dd>${e(a.identity || "尚未核验")}</dd><dt>最近核验</dt><dd>${e(time(a.checked))}</dd><dt>发布方式</dt><dd>${e(p.mode_label)}</dd><dt>能力说明</dt><dd>${e(p.note)}</dd></dl>`)}${section(
+      `<div class="drawer-body"><div class="detail-status-row">${badge(connectionStatus(a))}</div>${a.sync_message ? `<p class="form-note">${e(a.sync_message)}</p>` : ""}${risk ? `<div class="detail-alert red"><strong>平台已暂停</strong>${e(risk.reason)}<p>重新登录或检查执行连接不会解除发布限制。</p>${small("处理记录", "com-risk", a.platform)}</div>` : ""}${section("账号信息", `<dl class="details-grid"><dt>备注</dt><dd>${e(a.identity_hint || "—")}</dd><dt>登录身份</dt><dd>${e(a.identity || "尚未核验")}</dd><dt>最近核验</dt><dd>${e(time(a.checked))}</dd><dt>发布方式</dt><dd>${e(p.mode_label)}</dd><dt>能力说明</dt><dd>${e(p.note)}</dd></dl>`)}${section(
         "关联计划",
         data.plans
           .filter((p) => p.payload.account_id === id)
@@ -298,7 +298,7 @@ export function drawer(data, u) {
               `<div class="mini-item">${small(p.payload.name, "com-v2-plan", p.id)}${badge(planStatus(p, data))}</div>`,
           )
           .join("") || '<p class="form-note">还没有关联计划。</p>',
-      )}<div class="login-steps"><div class="login-step"><div>打开账号专属 Chrome<small>在平台完成登录。</small></div></div><div class="login-step"><div>返回工作台检查连接<small>核验登录身份与适配器权限。</small></div></div><div class="login-step"><div>回到计划启用<small>平台暂停和未知结果需单独处理。</small></div></div></div></div><div class="drawer-footer"><p>账号与历史结果独立保存</p><div>${small("删除", "com-delete-account", id, "quiet")}${small("编辑", "com-edit-account", id)}${p.automatic ? small("检查连接", "com-check", id) : ""}${small("登录 / 打开", "com-open-account", id, "primary")}</div></div>`
+      )}<div class="login-steps"><div class="login-step"><div>打开平台网站<small>默认使用日常 Chrome，沿用平常的登录状态。</small></div></div><div class="login-step"><div>返回工作台检查执行连接<small>核验原绑定执行账号；日常网页登录不会自动建立执行连接。</small></div></div><div class="login-step"><div>回到计划启用<small>平台暂停和未知结果需单独处理。</small></div></div></div></div><div class="drawer-footer"><p>账号与历史结果独立保存</p><div>${small("删除", "com-delete-account", id, "quiet")}${small("编辑", "com-edit-account", id)}${p.automatic ? small("检查执行连接", "com-check", id) : ""}${small("打开网站", "com-open-account", id, "primary")}</div></div>`
     );
   }
   return null;

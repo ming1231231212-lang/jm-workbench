@@ -12,7 +12,8 @@ from fastapi.staticfiles import StaticFiles
 from .. import APP_NAME, __version__
 from ..core.config import Config, revision
 from ..core.db import Store
-from ..core.models import AccountInput, TaskInput, BindingInput, SettingsInput, LaunchInput, ClearRiskInput
+from ..adapters.local_browser import open_local_url
+from ..core.models import BrowserOpenInput, AccountInput, TaskInput, BindingInput, SettingsInput, LaunchInput, ClearRiskInput
 from ..core.platforms import PLATFORMS
 from ..services.configuration import Configuration
 from ..services.engine import Engine
@@ -116,6 +117,10 @@ def create_app(home=None, worker=True, configuration=None, publishing_bridge=Non
                 'platforms': [{'id': k, **v, 'crawler': k == 'ks' or config.crawler_ready(), 'verification': '待该平台登录实测'} for k, v in PLATFORMS.items()],
                 'settings': config.values, 'defaults': DEFAULTS, 'adult_comment_core': ADULT_CORE,
                 'events': store.rows('SELECT * FROM events ORDER BY id DESC LIMIT 50')}
+
+    @app.post('/api/browser/open')
+    def browser_open(payload: BrowserOpenInput):
+        return open_local_url(config, payload.url)
 
     @app.post('/api/accounts')
     def add_account(payload: AccountInput):

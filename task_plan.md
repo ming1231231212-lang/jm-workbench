@@ -207,3 +207,6 @@ Next Step：本輪功能与正式运行检查完成，后续模块迭代沿用wo
 4. 备份部署、当前计划修正和正式界面验证 — complete。26条历史记录保持不变，真实服务停止后约30.2秒自动恢复，28条任务状态不变；正式界面4项检查通过。
 
 Next Step：本轮修复完成；10月7日直接从工作台回执确认两平台文章已自动执行，贴吧评论仍按缺口补查。设计见docs/community-reliability.md，真实证据放outputs/community-reliability-20261006。
+
+## 2026-10-09 本地 Chrome
+统一网页打开入口与启动脚本；daily 默认、account 显式兼容；真实浏览器验证和回归结果见 docs/local-browser.md 与 outputs/local-chrome-20261009。

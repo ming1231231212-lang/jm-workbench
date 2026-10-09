@@ -1,3 +1,4 @@
+import { installLocalBrowserLinks } from "./local-browser.js";
 import * as views from "./views.js";
 import { escape as e } from "./ui.js";
 import { CommunityWorkspace } from "./community-v2.js";
@@ -90,6 +91,7 @@ async function request(path, body, method = "POST") {
   if (!response.ok) throw Error(result.error || "请求未完成");
   return result;
 }
+installLocalBrowserLinks(document, request, toast);
 async function render() {
   const previousPage = page;
   const current = viewRequests.begin();
@@ -250,7 +252,7 @@ async function action(name, id) {
   else if (name === "open-account" || name === "check-account") {
     toast(
       name === "open-account"
-        ? "正在打开账号浏览器…"
+        ? "正在使用本地 Chrome 打开网站…"
         : "正在核验账号连接，请稍候…",
     );
     result = await request(

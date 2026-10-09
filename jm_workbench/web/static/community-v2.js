@@ -68,7 +68,7 @@ export class CommunityWorkspace extends CommunityUI {
     )
       .catch(() => ({
         status: "pending",
-        message: "同步未完成，可点击“检查连接”重试",
+        message: "执行连接检查未完成，可点击“检查执行连接”重试",
       }))
       .then((result) => {
         // A newer manual check, account edit or removal wins over a delayed response.

@@ -8,6 +8,7 @@ import urllib.request
 from pathlib import Path
 from urllib.parse import urlencode, urlparse, parse_qs
 from ..adapters.chrome import endpoint
+from ..adapters.local_browser import open_local_url
 from ..adapters.errors import LocalBrowserError
 from .registry import platform, compose_url, safe_post_url, destination, tieba_thread_url
 
@@ -348,6 +349,9 @@ class CommunityAdapter:
         return {'post_id':str(ident),'url':safe_post_url(p,url),'visibility':'unverified'}
 
     def open(self, account, url):
+        safe_post_url(account['platform'],url)
+        if self.config.values.get('browser_open_mode', 'daily') != 'account':
+            return open_local_url(self.config,url)
         p=Path(account['profile_dir']).resolve()
         p.mkdir(parents=True,exist_ok=True)
         chrome=Path(self.config.values['chrome_path'])
@@ -362,6 +366,8 @@ class CommunityAdapter:
         if account['platform'] not in ('tieba','juejin','csdn'):return
         try:endpoint(account['profile_dir']);return
         except LocalBrowserError:pass
+        if self.config.values.get('browser_open_mode', 'daily') != 'account':
+            raise PreflightStopped('原绑定执行连接未就绪；当前使用日常 Chrome，不会自动启动独立浏览器，请检查执行连接')
         self.open(account,platform(account['platform'])['home'])
         for _ in range(20):
             time.sleep(.5)
@@ -372,7 +378,7 @@ class CommunityAdapter:
     def tieba(self, account, payload, target):
         from playwright.sync_api import sync_playwright
         try:ws=endpoint(account['profile_dir'])
-        except LocalBrowserError:raise NotSubmitted('账号浏览器未连接，请先点击“登录 / 打开”') from None
+        except LocalBrowserError:raise NotSubmitted('原绑定执行连接未就绪；日常 Chrome 登录不代表自动发布已连接') from None
         with sync_playwright() as pw:
             try:browser=pw.chromium.connect_over_cdp(ws,timeout=10000)
             except Exception:raise NotSubmitted('账号浏览器连接超时，请检查该账号Chrome是否仍在运行') from None

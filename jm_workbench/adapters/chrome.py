@@ -6,6 +6,7 @@ from pathlib import Path
 from urllib.parse import urlparse
 from .errors import LocalBrowserError
 from ..core.platforms import PLATFORMS
+from .local_browser import open_local_url
 
 
 def endpoint(profile):
@@ -23,10 +24,12 @@ def endpoint(profile):
             raise ValueError()
         return version['webSocketDebuggerUrl']
     except Exception as ex:
-        raise LocalBrowserError('账号浏览器未连接，请先打开该账号浏览器并登录') from ex
+        raise LocalBrowserError('自动任务的原绑定浏览器未连接；日常 Chrome 的网页登录不会自动建立执行连接') from ex
 
 
 def open_browser(config, account):
+    if config.values.get('browser_open_mode', 'daily') != 'account':
+        return open_local_url(config, PLATFORMS[account['platform']]['home'])
     profile = Path(account['profile_dir']).resolve()
     profile.mkdir(parents=True, exist_ok=True)
     chrome = Path(config.values['chrome_path'])

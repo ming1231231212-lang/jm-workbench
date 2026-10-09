@@ -21,7 +21,7 @@ class Config:
         self.home.mkdir(parents=True, exist_ok=True)
         self.path = self.home / 'config.local.json'
         self.values = {'chrome_path': r'C:\Program Files\Google\Chrome\Application\chrome.exe',
-                       'crawler_root': '', 'crawler_python': ''}
+                       'crawler_root': '', 'crawler_python': '', 'browser_open_mode': 'daily'}
         if self.path.exists():
             self.values.update(json.loads(self.path.read_text(encoding='utf-8-sig')))
 

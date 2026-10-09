@@ -118,7 +118,7 @@ def test_browser_restore_reuses_exact_profile_and_never_reopens_connected(monkey
     from jm_workbench.community import adapters
     from jm_workbench.adapters.errors import LocalBrowserError
     from types import SimpleNamespace
-    adapter=adapters.CommunityAdapter(SimpleNamespace(values={}))
+    adapter=adapters.CommunityAdapter(SimpleNamespace(values={'browser_open_mode':'account'}))
     a={'platform':'tieba','profile_dir':str(tmp_path/'bound-profile')}
     calls=[];opened=[]
     def endpoint(profile):

@@ -77,7 +77,12 @@ class BindingInput(Strict):
     enabled: bool = True
 
 
+class BrowserOpenInput(Strict):
+    url: str = Field(min_length=1, max_length=8192)
+
+
 class SettingsInput(Strict):
+    browser_open_mode: Literal['daily', 'account'] = 'daily'
     chrome_path: str = Field(max_length=500)
     crawler_root: str = Field(max_length=500)
     crawler_python: str = Field(max_length=500)

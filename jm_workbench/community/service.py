@@ -226,7 +226,7 @@ class Community:
         for row in totals:
             key='recorded' if row['state']=='recorded' else row['kind']+'_submitted'
             if key in summary:summary[key]+=row['n']
-        return {'platforms':list(PLATFORMS.values()),'accounts':[self.account(r['id']) for r in self.store.rows('SELECT id FROM community_accounts ORDER BY rowid')],
+        return {'browser_open_mode':self.cfg.config.values.get('browser_open_mode','daily'),'platforms':list(PLATFORMS.values()),'accounts':[self.account(r['id']) for r in self.store.rows('SELECT id FROM community_accounts ORDER BY rowid')],
                 'posts':posts,'plans':self.daily.state(),'risk':self.store.rows('SELECT * FROM community_risk'),
                 'summary':summary,'post_total':self.store.rows('SELECT COUNT(*) AS n FROM community_posts')[0]['n'],
                 'post_limit':200,'server_time':now,

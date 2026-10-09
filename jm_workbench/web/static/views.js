@@ -141,7 +141,7 @@ export function accounts(s) {
     ) +
     `<div class="section-heading"><h2>评论与采集账号</h2><div class="row-actions"><a class="button small" href="#matrix">任务矩阵</a><a class="button quiet small" href="#platforms">平台能力</a></div></div>` +
     (s.accounts.length
-      ? `<div class="account-grid">${s.accounts.map((a) => `<article class="panel account-card"><div class="card-top"><span class="avatar">${e(a.name.slice(0, 1))}</span>${badge(a.connection)}</div><h3>${e(a.name)}</h3><p>${e(platformName(s, a.platform))}${a.enabled ? "" : " · 已停用"}</p><dl><dt>身份核验</dt><dd>${a.identity ? "已绑定固定身份" : "运行时检查平台登录"}</dd><dt>上次检查</dt><dd>${time(a.checked_at)}</dd></dl><details><summary>浏览器资料目录</summary><code>${e(a.profile_dir)}</code></details><div class="card-footer">${button("打开浏览器", "open-account", a.id)}${button("检查连接", "check-account", a.id, "primary")}${button("编辑", "edit-account", a.id, "quiet")}</div></article>`).join("")}</div>`
+      ? `<div class="account-grid">${s.accounts.map((a) => `<article class="panel account-card"><div class="card-top"><span class="avatar">${e(a.name.slice(0, 1))}</span>${badge(a.connection)}</div><h3>${e(a.name)}</h3><p>${e(platformName(s, a.platform))}${a.enabled ? "" : " · 已停用"}</p><dl><dt>身份核验</dt><dd>${a.identity ? "已绑定固定身份" : "运行时检查平台登录"}</dd><dt>上次检查</dt><dd>${time(a.checked_at)}</dd></dl><details><summary>浏览器资料目录</summary><code>${e(a.profile_dir)}</code></details><div class="card-footer">${button("打开网站", "open-account", a.id)}${button("检查执行连接", "check-account", a.id, "primary")}${button("编辑", "edit-account", a.id, "quiet")}</div></article>`).join("")}</div>`
       : empty(
           "先连接一个账号",
           "登录资料只保存在本机，不上传到GitHub。",
@@ -239,7 +239,7 @@ export function settings(s) {
       "工作台设置",
       "运行目录和依赖保存在本机。修改后新任务使用新配置。",
     ) +
-    `<form id="settings-form" class="panel form-panel">${field("Google Chrome程序路径", "chrome_path", s.settings.chrome_path, "text", "required")}${field("MediaCrawler项目目录", "crawler_root", s.settings.crawler_root, "text", "required")}${field("MediaCrawler的Python程序路径", "crawler_python", s.settings.crawler_python, "text", "required")}<div class="note">请选择已有运行环境的Python。工作台不会修改爬虫的共享配置，也不会把登录资料上传到GitHub。</div><button class="button primary">保存设置</button></form><div class="panel spaced"><div class="panel-title"><h2>执行保护</h2></div><div class="protection-grid"><div><b>读取</b><p>平台共享间隔 ≥ 5分钟，滚动24小时最多24批，08:00–23:00。</p></div><div><b>评论</b><p>平台共享间隔 ≥ 30分钟，滚动24小时最多5条，20:00–23:00内可缩短。</p></div><div><b>去重</b><p>同一视频不重复接触；同一作者和相同文本7天内不重复。</p></div><div><b>异常</b><p>账号不一致、平台限制、发送结果不确定均停发，不自动换号或重试。</p></div></div></div>`
+    `<form id="settings-form" class="panel form-panel">${select("网页打开方式", "browser_open_mode", [["daily", "日常 Chrome（推荐）"], ["account", "独立账号浏览器（旧任务兼容）"]], s.settings.browser_open_mode || "daily")}<p class="form-note">日常 Chrome 沿用平常的网页登录状态。自动任务仍核验原绑定执行账号，不会自动迁移登录资料。</p>${field("Google Chrome程序路径", "chrome_path", s.settings.chrome_path, "text", "required")}${field("MediaCrawler项目目录", "crawler_root", s.settings.crawler_root, "text", "required")}${field("MediaCrawler的Python程序路径", "crawler_python", s.settings.crawler_python, "text", "required")}<div class="note">请选择已有运行环境的Python。工作台不会修改爬虫的共享配置，也不会把登录资料上传到GitHub。</div><button class="button primary">保存设置</button></form><div class="panel spaced"><div class="panel-title"><h2>执行保护</h2></div><div class="protection-grid"><div><b>读取</b><p>平台共享间隔 ≥ 5分钟，滚动24小时最多24批，08:00–23:00。</p></div><div><b>评论</b><p>平台共享间隔 ≥ 30分钟，滚动24小时最多5条，20:00–23:00内可缩短。</p></div><div><b>去重</b><p>同一视频不重复接触；同一作者和相同文本7天内不重复。</p></div><div><b>异常</b><p>账号不一致、平台限制、发送结果不确定均停发，不自动换号或重试。</p></div></div></div>`
   );
 }
 
@@ -284,5 +284,5 @@ export function accountForm(s, a = {}) {
       ["false", "停用"],
     ],
     String(a.enabled ?? true),
-  )}<p class="muted">保存后点击“打开浏览器”，在平台完成登录，再“检查连接”。</p><div class="dialog-footer">${button("取消", "close-dialog")}<button class="button primary">保存账号</button></div></form>`;
+  )}<p class="muted">打开网站默认使用日常 Chrome；检查执行连接仍核验原绑定自动任务账号，网页登录不会自动建立执行连接。</p><div class="dialog-footer">${button("取消", "close-dialog")}<button class="button primary">保存账号</button></div></form>`;
 }

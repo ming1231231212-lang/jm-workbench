@@ -79,7 +79,7 @@ def test_tieba_identity_requires_authenticated_id(data):
 
 def test_tieba_browser_disconnect_is_actionable(tmp_path):
     a=CommunityAdapter(Config(tmp_path))
-    with pytest.raises(NotSubmitted,match='浏览器未连接'):
+    with pytest.raises(NotSubmitted,match='原绑定执行连接未就绪'):
         a.check({'platform':'tieba','profile_dir':str(tmp_path/'missing-profile')},'')
 
 
