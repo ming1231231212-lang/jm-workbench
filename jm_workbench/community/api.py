@@ -1,4 +1,5 @@
 from fastapi import APIRouter, Query
+from fastapi.responses import Response
 from .models import CommunityAccount, CommunityPost, LinkRecord, ResolveRecord, ClearRecord, DailyPlan, BackfillInput
 
 
@@ -59,6 +60,12 @@ def router(service):
 
     @api.post('/posts')
     def save(payload:CommunityPost):return service.save(payload)
+
+    @api.get('/posts/{ident}/export')
+    def export(ident:str,format:str=Query('md',pattern='^(md|html)$')):
+        value=service.export_content(ident,format)
+        return Response(value,media_type='text/html' if format=='html' else 'text/markdown',
+                        headers={'Content-Disposition':f'attachment; filename="JM-content-{ident}.{format}"'})
 
     @api.put('/posts/{ident}')
     def edit(ident:str,payload:CommunityPost):return service.save(payload,ident)

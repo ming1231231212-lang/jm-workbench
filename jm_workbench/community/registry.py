@@ -11,6 +11,7 @@ _ROWS = [
     ('v2ex','V2EX','国内','互联网 AI 独立开发','web','https://www.v2ex.com/','https://www.v2ex.com/new','主题帖','节点名（可选）',120),
     ('bilibili','哔哩哔哩','国内','AI教程 科技 内容创作','web','https://www.bilibili.com/','https://t.bilibili.com/','动态/图文','',100),
     ('weibo','微博','国内','AI资讯 互联网 科技','web','https://weibo.com/','https://weibo.com/','微博','',120),
+    ('wechat_mp','微信公众号','国内','AI应用 互联网 个人创作','web','https://mp.weixin.qq.com/','https://mp.weixin.qq.com/','公众号图文','',120),
     ('oschina','OSCHINA','国内','开源 AI工程 编程','web','https://www.oschina.net/','https://my.oschina.net/','博客/讨论','',120),
     ('segmentfault','SegmentFault 思否','国内','AI开发 编程 技术问答','web','https://segmentfault.com/','https://segmentfault.com/write','文章/问答','',120),
     ('reddit','Reddit','国外','AI 互联网 创业 综合兴趣','api','https://www.reddit.com/','https://www.reddit.com/submit','文字主题帖','Subreddit 名称，不带 r/',120),
@@ -28,10 +29,15 @@ MODES = {'api':'API发布 · 需授权','browser':'浏览器发布 · 需登录�
 PLATFORMS = {r[0]: dict(zip(('id','name','region','categories','mode','home','compose','format','destination_hint','title_limit'),r)) for r in _ROWS}
 for p in PLATFORMS.values():
     p.update(mode_label=MODES[p['mode']], automatic=p['mode'] in ('api','browser'), verification='适配器模拟测试；真实发帖未验收')
+    p['capabilities']={'local_draft':True,'open_website':True,'record_link':True,
+        'auto_publish':p['automatic'],'auto_comment':p['id'] in ('tieba','juejin','csdn'),
+        'daily_plan':p['id'] in ('tieba','juejin','csdn'),'export_content':True}
     p['note'] = ('禁止自动发帖和AI生成/改写文字，请本人撰写并在网站提交。' if p['id']=='hackernews' else
                  '账号需具备API权限；仅保存密钥不代表可以发布。' if p['mode']=='api' else
                  '依赖网站编辑器；验证码或页面变化会暂停，不绕过限制。' if p['mode']=='browser' else
                  '工作台管理草稿、打开账号网页、复制内容、登记链接；最终在网站提交。')
+    if p['id']=='wechat_mp':
+        p['note']='支持本地草稿、导出排版、打开公众平台与登记文章链接。当前需在公众平台完成发布；个人号不默认具备接口发布权限。'
 
 
 def platform(ident):

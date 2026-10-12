@@ -103,8 +103,9 @@ def test_catalog_and_no_secret_leak(setup):
     c, s, _, _ = setup
     account(s)
     state = c.get('/api/community/state').json()
-    assert len(state['platforms']) == 20
-    assert sum(p['region'] == '国内' for p in state['platforms']) == 10
+    assert len(state['platforms']) == 21
+    assert any(p['id']=='wechat_mp' for p in state['platforms'])
+    assert sum(p['region'] == '国内' for p in state['platforms']) == 11
     assert 'secret-DO-NOT-LEAK' not in json.dumps(state)
     assert 'secret-DO-NOT-LEAK' not in s.store.path
     assert state['accounts'][0]['secret_configured']

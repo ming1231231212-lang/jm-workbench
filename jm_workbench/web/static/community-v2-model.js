@@ -15,7 +15,7 @@ export const statusLabels = {
   cancelled: "已取消",
   manual: "待网页发布",
   recorded: "已登记 · 待核验",
-  connected: "执行账号已核验",
+  connected: "已绑定 · 发布前复查",
   unverified: "尚未核验",
 };
 export const tones = {

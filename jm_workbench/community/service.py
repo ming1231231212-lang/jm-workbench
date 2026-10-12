@@ -107,6 +107,7 @@ class Community:
 
     def check_account(self,ident):
         a=self.account(ident,True)
+        if not platform(a['platform'])['automatic']:raise ValueError('此平台在网站完成发布，无需检查自动执行连接')
         if not a['enabled']:raise ValueError('请先启用此账号')
         try:identity=self.adapter.check(a,a['_secret'])
         except IdentityChanged:raise
@@ -213,6 +214,18 @@ class Community:
             r.update(account_name=snapshot['account']['name'],destination=snapshot['destination'])
             result.append(r)
         return result
+
+    def export_content(self,ident,format='md'):
+        import html
+        rows=self.store.rows('SELECT payload FROM community_posts WHERE id=?',(ident,))
+        if not rows:raise ValueError('内容不存在，请刷新列表')
+        p=json.loads(rows[0]['payload'])
+        if format=='md':return '# '+p['title']+'\n\n'+p['body']+'\n'
+        if format!='html':raise ValueError('不支持的导出格式')
+        title=html.escape(p['title']);body=html.escape(p['body'])
+        return ('<!doctype html><html lang="zh-CN"><meta charset="utf-8"><title>'+title+'</title>'
+                '<body><article style="max-width:680px;margin:32px auto;font-family:Microsoft YaHei,sans-serif;line-height:1.9;color:#202a28">'
+                '<h1 style="font-size:24px">'+title+'</h1><div style="white-space:pre-wrap;font-size:16px">'+body+'</div></article></body></html>')
 
     def state(self):
         posts=[]
