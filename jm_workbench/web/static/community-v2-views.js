@@ -1,6 +1,7 @@
 import { backfillView } from "./community-backfill.js";
 import { escape as e, button as b, time, empty } from "./ui.js";
 import { icon } from "./community-icons.js";
+import { overview, communityTabs } from "./novice.js";
 import {
   statusLabels,
   tones,
@@ -49,37 +50,7 @@ export function plansView(data, u) {
       ["blocked", "login", "disabled"].includes(planStatus(p, data).key),
     );
   const summary = data.summary || {};
-  return `<div class="summary">${[
-    [
-      "已启用的计划",
-      all.filter((p) => p.state === "enabled").length,
-      "个",
-      "enabled",
-      "calendar-check-2",
-    ],
-    [
-      "今日已提交帖子",
-      summary.thread_submitted || 0,
-      "篇",
-      "thread",
-      "file-text",
-    ],
-    [
-      "今日已提交评论",
-      summary.reply_submitted || 0,
-      "条",
-      "reply",
-      "message-square",
-    ],
-    ["需要你处理", attention.length, "项", "attention", "circle-alert"],
-  ]
-    .map(
-      ([label, n, unit, id, i]) =>
-        `<button class="stat ${id === "attention" ? "warning" : ""}" data-action="com-v2-stat" data-id="${id}"><span class="stat-label">${label}</span><span class="stat-icon">${icon(i)}</span><span class="stat-value">${n}<small>${unit}</small></span>${id === "thread" || id === "reply" ? '<span class="stat-note">回执与可见性分开</span>' : ""}</button>`,
-    )
-    .join(
-      "",
-    )}</div>${attention.length || data.risk.length ? `<div class="attention-strip">${icon("circle-alert")}<span><strong>${attention.length ? attention.length + " 个计划需要处理" : "存在平台暂停记录"}</strong><span class="attention-detail">，查看原因后再继续。</span></span>${b("去处理 " + icon("arrow-right"), "com-v2-stat", "attention")}</div>` : ""}<div class="section-heading"><h2>我的发布计划 <small>${all.length}</small></h2><span class="hint">帖子与评论独立设置 · 自动安排、补查缺口</span></div><section class="panel">${toolbar(data, u, "plans")}${
+  return `<div class="section-heading"><h2>我的发布计划 <small>${all.length}</small></h2><span class="hint">帖子与评论独立设置 · 自动安排、补查缺口</span></div><section class="panel">${toolbar(data, u, "plans")}${
     shown.length
       ? `<div class="table-wrap"><table class="plan-table"><thead><tr><th>计划名称</th><th>平台 / 目标</th><th>今日进度</th><th>当前状态</th><th class="col-next">下一步</th><th>操作</th></tr></thead><tbody>${shown
           .map((p) => {
@@ -101,22 +72,9 @@ export function plansView(data, u) {
             "primary",
           ),
         )
-  }</section>${backfillView(data, u.backfillOpen)}<div class="below-grid"><section class="below-panel"><div class="panel-label"><h3>最近结果</h3>${small("查看全部 " + icon("arrow-up-right"), "com-tab", "content", "quiet")}</div>${
-    data.posts
-      .filter((p) => p.jobs?.length)
-      .slice(0, 2)
-      .map(
-        (p) =>
-          `<div class="activity-row"><span class="activity-dot"></span><div><button class="text-button" data-action="com-view" data-id="${e(p.id)}">${e(p.payload.title)}</button><span class="subtext">${postStatus(p).label} · ${e(
-            p.jobs
-              .map((j) => j.message)
-              .filter(Boolean)
-              .join("；"),
-          )}</span></div></div>`,
-      )
-      .join("") || '<p class="form-note">发布后，这里显示最新结果。</p>'
-  }</section><section class="below-panel"><div class="panel-label"><h3>内容准备情况</h3>${small("查看计划素材", "com-v2-material-help", "", "quiet")}</div><div class="capacity-row"><span>未用帖子素材</span><b>${all.reduce((n, p) => n + p.remaining_topics, 0)} 篇</b></div><div class="capacity-row"><span>未用评论素材 / 规则</span><b>${all.reduce((n, p) => n + p.remaining_replies, 0)} 条</b></div><p class="capacity-note">缺口每30分钟重查；暂停保留，已发送不重复。</p></section></div>`;
+  }</section>`;
 }
+
 export function contentView(data, u) {
   const rows = filterPosts(data, u),
     size = 8,
@@ -198,25 +156,14 @@ export function accountsView(data, u) {
   }</section>${data.risk.length ? `<section class="below-panel risk-records"><h3>平台暂停记录</h3>${data.risk.map((r) => `<div class="mini-item"><div><strong>${e(getPlatform(data, r.platform).name)}</strong><p>${e(r.reason)}</p></div>${small("处理记录", "com-risk", r.platform)}</div>`).join("")}</section>` : ""}`;
 }
 export function workspace(data, u) {
-  const primary =
-    u.tab === "plans"
-      ? b(icon("plus") + "新建计划", "com-plan-new", "", "primary")
-      : u.tab === "accounts"
-        ? b(icon("plus") + "添加账号", "com-new-account", "", "primary")
-        : b(icon("plus") + "写内容", "com-v2-compose", "", "primary");
-  return `<section id="community-v2"><div class="page-heading"><div><div class="eyebrow">COMMUNITY</div><h1>社区发布</h1><p>安排要做的事，随时看清每一条结果。</p></div>${primary}</div><nav class="view-tabs" aria-label="社区发布视图">${[
-    ["plans", "发布计划", "calendar-check-2", data.plans?.length || 0],
-    ["content", "内容记录", "file-text", data.post_total ?? data.posts.length],
-    ["accounts", "平台账号", "users-round", data.accounts.length],
-  ]
-    .map(
-      ([id, name, i, count]) =>
-        `<button data-action="com-tab" data-id="${id}" aria-current="${id === u.tab ? "page" : "false"}">${icon(i)}${name}<span>${count}</span></button>`,
-    )
-    .join(
-      "",
-    )}<div class="view-date">${icon("calendar-days")}${e(currentDay(data))} · 北京时间</div></nav><div id="community-view">${u.tab === "plans" ? plansView(data, u) : u.tab === "content" ? contentView(data, u) : accountsView(data, u)}</div></section>`;
+  const names={overview:['今日工作','看清今天的进度，有问题就在这里处理。'],content:['内容与记录','写好的帖子、评论和实际发布结果，都在这里。'],plans:['发布安排','选好账号、备好内容，按设置的时间执行。'],accounts:['平台账号','添加常用平台，登录后检查连接。']};
+  const [title,description]=names[u.tab]||names.overview;
+  const primary=u.tab==='plans'?b(icon('plus')+'新建安排','com-plan-new','','primary'):u.tab==='accounts'?b(icon('plus')+'添加账号','com-new-account','','primary'):b(icon('plus')+'写内容','com-v2-compose','','primary');
+  data._backfillOpen=Boolean(u.backfillOpen);
+  const home=()=>overview(data).replace('<div id="novice-history"></div>',backfillView(data,u.backfillOpen));
+  return `<section id="community-v2"><div class="page-heading"><div><h1>${title}</h1><p>${description}</p></div>${primary}</div><div id="community-view">${u.tab==='plans'?plansView(data,u):u.tab==='content'?contentView(data,u):u.tab==='accounts'?accountsView(data,u):home()}</div></section>`;
 }
+
 function drawerHead(kicker, title, sub) {
   return `<div class="drawer-header"><div class="drawer-title-row"><div><div class="eyebrow">${kicker}</div><h2 id="community-drawer-title">${e(title)}</h2></div>${b(icon("x"), "com-v2-close", "", "icon-button")}</div><p>${e(sub)}</p></div>`;
 }

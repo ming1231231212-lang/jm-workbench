@@ -1,0 +1,104 @@
+/* A single, quiet shell for everyday work. Existing tools retain their behavior. */
+body.jm-workspace {--ink:#202a28;--muted:#69736e;--line:#e3e8e2;--soft:#f7f8f5;--green:#24745e;--green-dark:#195740;--green-soft:#eaf2ed;--amber:#a75a16;background:var(--soft);font-family:"Microsoft YaHei",sans-serif;font-size:14px;line-height:1.65}
+body.jm-workspace .sidebar {width:210px;background:#fff;color:var(--ink);border-right:1px solid var(--line);padding:28px 14px 18px;overflow-y:auto}
+body.jm-workspace .brand {color:var(--ink);font-size:18px;gap:10px;padding:0 8px;flex-shrink:0}
+body.jm-workspace .brand-mark {background:var(--green);color:#fff;border-radius:9px;width:36px;height:36px;font-size:14px;display:grid;place-items:center;letter-spacing:0}
+body.jm-workspace .brand small {color:var(--muted);font-size:10px;letter-spacing:0;margin-top:2px}
+body.jm-workspace .nav-label {color:#89928b;font-size:11px;margin:35px 12px 12px;letter-spacing:1px}
+body.jm-workspace .sidebar nav {gap:5px;display:grid}
+body.jm-workspace .sidebar nav a {display:flex;align-items:center;gap:12px;padding:12px 14px;color:#56625a;border-radius:8px;text-decoration:none;font-size:14px;font-weight:500;white-space:nowrap}
+body.jm-workspace .sidebar nav a:hover {background:#f2f5ef;color:var(--ink)}
+body.jm-workspace .sidebar nav a.active {background:var(--green-soft);color:#195740;font-weight:700}
+body.jm-workspace .sidebar nav a::before {display:none}
+body.jm-workspace .sidebar nav a svg {width:19px;height:19px}
+body.jm-workspace .more-tools {margin-top:25px;border-top:1px solid var(--line);padding-top:15px}
+body.jm-workspace .more-tools summary {cursor:pointer;list-style:none;display:flex;gap:12px;align-items:center;color:#69736e;padding:12px 14px;font-size:13px}
+body.jm-workspace .more-tools summary::-webkit-details-marker {display:none}
+body.jm-workspace .more-tools summary svg:last-child {margin-left:auto;width:14px}
+body.jm-workspace .more-tools a {font-size:13px;padding:10px 14px}
+body.jm-workspace .sidebar-bottom {font-size:11px;color:var(--muted);line-height:1.8;padding:20px 10px 0;border-top:0}
+body.jm-workspace #version {font-size:10px;color:#8b938e;display:block;overflow-wrap:anywhere}
+body.jm-workspace .shell>main {margin-left:210px;background:var(--soft);min-width:0}
+body.jm-workspace .topbar {height:62px;padding:0 38px;background:#fff;border-bottom:1px solid var(--line)}
+body.jm-workspace .breadcrumb-prefix {display:none}
+body.jm-workspace #page-label {font-weight:500;font-size:13px;color:var(--muted)}
+body.jm-workspace .content {padding:30px 38px 20px;max-width:1420px;margin:auto;min-height:calc(100vh - 115px)}
+body.jm-workspace .page-heading {margin-bottom:25px;gap:20px;align-items:center}
+body.jm-workspace h1 {font-size:28px;line-height:1.4;font-weight:700;letter-spacing:0}
+body.jm-workspace .page-heading p {color:var(--muted);font-size:13px;margin-top:7px}
+body.jm-workspace h2 {font-size:17px;font-weight:700;letter-spacing:0}
+body.jm-workspace h3 {font-size:15px;line-height:1.5}
+body.jm-workspace .eyebrow {display:none}
+body.jm-workspace .button {min-height:38px;border-radius:7px;box-shadow:none;font-weight:500;padding:8px 14px;gap:7px;white-space:nowrap}
+body.jm-workspace .button.primary {background:var(--green);border-color:var(--green);color:#fff}
+body.jm-workspace .button.primary:hover {background:var(--green-dark)}
+body.jm-workspace .button.small {min-height:33px;padding:6px 11px;font-size:12px}
+body.jm-workspace .button svg {width:16px;height:16px}
+body.jm-workspace .panel,body.jm-workspace .below-panel {border:1px solid var(--line);box-shadow:none;border-radius:10px;background:white}
+body.jm-workspace .section-heading {margin:0 0 14px;gap:15px;display:flex;justify-content:space-between;align-items:center}
+body.jm-workspace .section-heading p {font-size:12px;color:var(--muted);margin-top:4px}
+body.jm-workspace .table-wrap {overflow-x:auto}
+body.jm-workspace table {font-size:13px}
+body.jm-workspace th {color:var(--muted);font-size:12px;background:#fafbf9;font-weight:500}
+body.jm-workspace td {padding-top:18px;padding-bottom:18px;line-height:1.7}
+body.jm-workspace .toolbar {padding:16px;gap:10px;flex-wrap:wrap}
+body.jm-workspace .toolbar .search {min-width:180px;flex:1}
+body.jm-workspace .toolbar kbd {display:none}
+body.jm-workspace .badge {border-radius:5px;font-size:11px;padding:3px 7px;line-height:1.5;white-space:nowrap}
+body.jm-workspace .community-density {display:none}
+body.jm-workspace .view-tabs {display:none}
+body.jm-workspace footer {max-width:1420px;padding:16px 38px;color:#919a92;font-size:11px;border:0}
+body.jm-workspace .novice-status {display:flex;align-items:center;gap:15px;border:1px solid #dbe5dc;background:#eff5ef;border-radius:10px;padding:18px 20px;margin-bottom:22px}
+body.jm-workspace .novice-status>div {flex:1;min-width:0}
+body.jm-workspace .novice-status strong {font-size:14px;font-weight:600}
+body.jm-workspace .novice-status p {font-size:12px;color:#627067;margin-top:3px;overflow-wrap:anywhere}
+body.jm-workspace .novice-status.warning {background:#fff8ee;border-color:#ecdcc2}
+body.jm-workspace .runtime-mark {display:grid;place-items:center;width:36px;height:36px;background:#fff;border-radius:50%;color:var(--green);flex-shrink:0}
+body.jm-workspace .runtime-mark.stopped,body.jm-workspace .runtime-mark.attention {color:var(--amber)}
+body.jm-workspace .novice-metrics {display:grid;grid-template-columns:repeat(4,1fr);gap:14px}
+body.jm-workspace .novice-metrics button {border:1px solid var(--line);background:#fff;border-radius:9px;padding:19px 21px;text-align:left;display:flex;flex-direction:column;gap:8px;min-width:0}
+body.jm-workspace .novice-metrics button:hover {border-color:#b9cebf;background:#fcfdfb}
+body.jm-workspace .novice-metrics span {font-size:12px;color:var(--muted)}
+body.jm-workspace .novice-metrics strong {font-size:29px;line-height:1.2;font-weight:600;font-variant-numeric:tabular-nums}
+body.jm-workspace .novice-metrics small {font-size:11px;color:var(--muted);font-weight:400;margin-left:7px}
+body.jm-workspace .receipt-note {font-size:11px;color:#7b867d;margin-top:10px}
+body.jm-workspace .novice-section {margin-top:30px}
+body.jm-workspace .today-plans {display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:16px}
+body.jm-workspace .today-plan {background:#fff;border:1px solid var(--line);border-radius:10px;padding:21px;display:flex;flex-direction:column;align-items:flex-start;gap:12px}
+body.jm-workspace .today-plan-title {width:100%;display:flex;align-items:center;gap:11px}
+body.jm-workspace .today-plan-title>div {flex:1;min-width:0}
+body.jm-workspace .today-plan-title p {color:var(--muted);font-size:11px;overflow-wrap:anywhere;margin-top:2px}
+body.jm-workspace .platform-mark {width:32px;height:32px;display:inline-grid;place-items:center;border-radius:8px;background:#edf2f8;color:#326492;font-size:13px;flex:none}
+body.jm-workspace .today-numbers {display:flex;align-items:center;gap:20px;border-top:1px solid #eff1ed;padding-top:14px;width:100%;font-size:12px;color:var(--muted)}
+body.jm-workspace .today-numbers b {font-size:18px;color:var(--ink);font-weight:600;margin-left:7px}
+body.jm-workspace .today-numbers small {font-size:10px;margin-left:auto}
+body.jm-workspace .plan-explanation {font-size:12px;color:#5f6c63;overflow-wrap:anywhere;line-height:1.8}
+body.jm-workspace .plan-next {color:var(--muted);font-size:11px;margin-top:auto;overflow-wrap:anywhere}
+body.jm-workspace .todo-list {background:white;border:1px solid var(--line);border-radius:9px;padding:0 20px}
+body.jm-workspace .todo-item {display:flex;align-items:center;gap:20px;padding:16px 0;border-bottom:1px solid #edf0e9}
+body.jm-workspace .todo-item:last-child {border-bottom:0}
+body.jm-workspace .todo-item>div {flex:1;min-width:0}
+body.jm-workspace .todo-item strong {font-size:13px}
+body.jm-workspace .todo-item p {font-size:12px;color:var(--muted);margin-top:4px;overflow-wrap:anywhere}
+body.jm-workspace .history-summary {margin-top:22px;background:#fff;border:1px solid var(--line);border-radius:9px;padding:14px 20px}
+body.jm-workspace .history-summary>summary {cursor:pointer;font-size:13px;color:#435348;line-height:1.8}
+body.jm-workspace .history-summary>summary span {font-size:11px;color:var(--muted);margin-left:18px}
+body.jm-workspace .history-summary .panel {border:0;margin-top:15px;padding:0}
+body.jm-workspace .recent-list {background:white;border:1px solid var(--line);border-radius:10px;overflow:hidden}
+body.jm-workspace .recent-content {display:flex;align-items:center;justify-content:space-between;gap:20px;border:0;border-bottom:1px solid #edf0e9;background:#fff;width:100%;text-align:left;padding:16px 20px;min-width:0}
+body.jm-workspace .recent-content:hover {background:#fafcf8}
+body.jm-workspace .recent-content:last-child {border-bottom:0}
+body.jm-workspace .recent-content>span:first-child {display:flex;align-items:center;gap:14px;min-width:0}
+body.jm-workspace .recent-content>span:first-child>span {min-width:0;display:grid;gap:3px}
+body.jm-workspace .recent-content strong {font-size:13px;font-weight:500;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+body.jm-workspace .recent-content small {font-size:11px;color:var(--muted);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+body.jm-workspace .novice-empty {border:1px dashed #cbd7c9;border-radius:9px;background:#fff;padding:35px;text-align:center}
+body.jm-workspace .novice-empty p {font-size:13px;color:var(--muted);margin:8px 0 20px}
+body.jm-workspace .novice-empty .button {margin:0 4px}
+body.jm-workspace dialog {border:1px solid var(--line);border-radius:12px;box-shadow:0 20px 70px #25352a25}
+body.jm-workspace .dialog-header p,body.jm-workspace .form-note {font-size:12px;line-height:1.8;color:var(--muted)}
+body.jm-workspace .field input,body.jm-workspace .field textarea,body.jm-workspace .field select {border-radius:6px;border-color:#dbe2d9}
+@media(min-width:1000px){body.jm-workspace .content-table .col-time {display:table-cell}}
+@media(max-width:1000px){body.jm-workspace .content {padding:24px}body.jm-workspace .topbar {padding:0 24px}body.jm-workspace .today-plans {grid-template-columns:1fr}body.jm-workspace .novice-metrics {gap:10px}body.jm-workspace .novice-metrics button {padding:16px}}
+@media(max-width:680px){body.jm-workspace .sidebar {width:210px;transform:translateX(-100%)}body.jm-workspace.community-menu-open .sidebar {transform:translateX(0)}body.jm-workspace .shell>main {margin-left:0}body.jm-workspace .content {padding:22px 16px}body.jm-workspace .topbar {padding:0 16px}body.jm-workspace h1 {font-size:23px}body.jm-workspace .page-heading {gap:12px}body.jm-workspace .page-heading p {font-size:12px}body.jm-workspace .novice-metrics {grid-template-columns:repeat(2,minmax(0,1fr))}body.jm-workspace .novice-status {padding:14px;gap:10px;flex-wrap:wrap}body.jm-workspace .novice-status>div {flex-basis:70%}body.jm-workspace .novice-status>.button {margin-left:46px}body.jm-workspace .todo-item {gap:10px}body.jm-workspace .history-summary>summary span {display:block;margin:4px 0 0 16px}body.jm-workspace .recent-content {padding:15px;gap:10px}body.jm-workspace .recent-content strong {max-width:210px}body.jm-workspace .recent-content small {max-width:210px}body.jm-workspace .today-numbers {gap:14px}body.jm-workspace .today-numbers small {display:none}body.jm-workspace footer {padding:15px 16px}body.jm-workspace footer span {display:none}}
+@media(prefers-reduced-motion:reduce){body.jm-workspace * {scroll-behavior:auto!important;animation:none!important;transition:none!important}}

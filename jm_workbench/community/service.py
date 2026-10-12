@@ -222,14 +222,16 @@ class Community:
             r['payload']=json.loads(r['payload']);r['jobs']=self.jobs(r['id']);posts.append(r)
         now=self.clock();local=datetime.fromtimestamp(now,SHANGHAI)
         midnight=local.replace(hour=0,minute=0,second=0,microsecond=0).timestamp()
-        totals=self.store.rows('''SELECT COALESCE(json_extract(snapshot,'$.payload.kind'),'thread') AS kind,state,COUNT(*) AS n
+        totals=self.store.rows('''SELECT platform,COALESCE(json_extract(snapshot,'$.payload.kind'),'thread') AS kind,state,COUNT(*) AS n
             FROM community_jobs WHERE (state='submitted' AND started>=? AND started<?)
-              OR (state='recorded' AND updated>=? AND updated<?) GROUP BY kind,state''',
+              OR (state='recorded' AND updated>=? AND updated<?) GROUP BY platform,kind,state''',
             (midnight,midnight+86400,midnight,midnight+86400))
-        summary={'day':local.date().isoformat(),'thread_submitted':0,'reply_submitted':0,'recorded':0}
+        summary={'day':local.date().isoformat(),'thread_submitted':0,'reply_submitted':0,'recorded':0,'platforms':{}}
         for row in totals:
             key='recorded' if row['state']=='recorded' else row['kind']+'_submitted'
             if key in summary:summary[key]+=row['n']
+            if row['state']=='submitted':
+                summary['platforms'].setdefault(row['platform'],{'thread':0,'reply':0})[row['kind']]+=row['n']
         return {'browser_open_mode':self.cfg.config.values.get('browser_open_mode','daily'),'platforms':list(PLATFORMS.values()),'accounts':[self.account(r['id']) for r in self.store.rows('SELECT id FROM community_accounts ORDER BY rowid')],
                 'backfill':self.backfill.state(),'posts':posts,'plans':self.daily.state(),'risk':self.store.rows('SELECT * FROM community_risk'),
                 'summary':summary,'post_total':self.store.rows('SELECT COUNT(*) AS n FROM community_posts')[0]['n'],

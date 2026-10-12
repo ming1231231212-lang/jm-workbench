@@ -15,9 +15,9 @@ export class CommunityWorkspace extends CommunityUI {
   constructor(opts) {
     super(opts);
     this.hostRender = opts.render;
-    this.tab = "plans";
+    this.tab = "overview";
     this.filters = {
-      tab: "plans",
+      tab: "overview",
       q: "",
       platform: "",
       status: "",
@@ -49,18 +49,11 @@ export class CommunityWorkspace extends CommunityUI {
         account.sync_status = cached.status;
         account.sync_message = cached.message;
       }
-      const interval = account.platform === "tieba" ? 30000 : 300000;
-      if (
-        !this.backgroundChecks.has(account.id) &&
-        (!cached ||
-          cached.version !== account.version ||
-          this.clock() - cached.at >= interval)
-      )
-        this.startBackgroundCheck(account);
     }
     return data;
   }
   startBackgroundCheck(account) {
+    if(this.backgroundChecks.has(account.id)) return this.backgroundChecks.get(account.id);
     const check = { at: this.clock(), version: account.version };
     this.syncChecks.set(account.id, check);
     const pending = this.request(
@@ -91,6 +84,7 @@ export class CommunityWorkspace extends CommunityUI {
       })
       .finally(() => this.backgroundChecks.delete(account.id));
     this.backgroundChecks.set(account.id, pending);
+    return pending;
   }
   page() {
     this.filters.tab = this.tab;
@@ -167,6 +161,7 @@ export class CommunityWorkspace extends CommunityUI {
   }
   changeView(tab) {
     this.tab = tab;
+    if (typeof location !== 'undefined' && location.hash !== '#community/'+tab) location.hash='community/'+tab;
     this.clear();
     document.querySelector("#community-drawer")?.close();
     this.repaint();
@@ -393,7 +388,7 @@ export class CommunityWorkspace extends CommunityUI {
       await this.load();
       return;
     }
-    this.tab = "plans";
+    this.changeView("plans");
     this.clear();
     this.dialog.close();
     await this.fresh();
@@ -472,8 +467,16 @@ export class CommunityWorkspace extends CommunityUI {
         this.filters.status = "submitted";
         this.filters.day = currentDay(this.data);
       } else {
+        this.changeView("plans");
         this.filters.status = this.filters.status === id ? "" : id;
       }
+      return this.repaint();
+    }
+    if(action==='com-v2-status') {
+      this.changeView('content');
+      this.filters.status=['thread','reply'].includes(id)?'submitted':id;
+      this.filters.kind=['thread','reply'].includes(id)?id:'';
+      this.filters.day=['thread','reply'].includes(id)?currentDay(this.data):'';
       return this.repaint();
     }
     if (action === "com-v2-material-help") {
@@ -548,5 +551,6 @@ export class CommunityWorkspace extends CommunityUI {
     }
     if (form.id === "com-delete-account-form")
       document.querySelector("#community-drawer")?.close();
+    if(['com-post-form','com-account-form','com-delete-account-form'].includes(form.id)) this.changeView(this.tab);
   }
 }

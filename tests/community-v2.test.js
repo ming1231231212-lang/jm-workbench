@@ -2,7 +2,7 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import { CommunityWorkspace } from "../jm_workbench/web/static/community-v2.js";
 
-test("slow browser checks cannot delay records or duplicate on refresh", async () => {
+test("viewing and refreshing records does not connect to account browsers", async () => {
   let resolveCheck,
     checks = 0;
   const ui = new CommunityWorkspace({
@@ -19,6 +19,9 @@ test("slow browser checks cannot delay records or duplicate on refresh", async (
   const loaded = await ui.load();
   assert.equal(loaded.accounts.length, 1);
   await ui.load();
+  assert.equal(checks, 0);
+  ui.startBackgroundCheck(ui.data.accounts[0]);
+  ui.startBackgroundCheck(ui.data.accounts[0]);
   assert.equal(checks, 1);
   const pending = ui.backgroundChecks.get("a");
   resolveCheck({ status: "pending", message: "等待登录" });
@@ -38,6 +41,7 @@ test("late sync cannot replace a newer manual account check", async () => {
         : new Promise((resolve) => (resolveCheck = resolve)),
   });
   await ui.load();
+  ui.startBackgroundCheck(ui.data.accounts[0]);
   const pending = ui.backgroundChecks.get("a");
   ui.syncChecks.set("a", { version: 1, status: "verified", at: Date.now() });
   ui.data.accounts[0].sync_status = "verified";
@@ -217,7 +221,7 @@ test("today summary link excludes older accepted posts", () => {
     1,
   );
 });
-test("new workspace escapes remote content and only exposes three main views", () => {
+test("workspace escapes remote content without duplicating sidebar navigation", () => {
   const html = workspace(
     {
       ...data,
@@ -239,7 +243,8 @@ test("new workspace escapes remote content and only exposes three main views", (
   );
   assert.ok(!html.includes("<script>"));
   assert.ok(html.includes("&lt;script&gt;"));
-  assert.equal((html.match(/aria-current="(?:page|false)"/g) || []).length, 3);
+  assert.equal((html.match(/aria-current="(?:page|false)"/g) || []).length, 0);
+  assert.ok(html.includes('内容与记录'));
 });
 test("comment drawer never creates script or credentialed links", () => {
   const html = drawer(

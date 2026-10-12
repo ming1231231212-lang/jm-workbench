@@ -4,6 +4,7 @@ import { escape as e } from "./ui.js";
 import { CommunityWorkspace } from "./community-v2.js";
 import { icon as communityIcon } from "./community-icons.js";
 import { initializeWorkspace, ViewRequests, routeIcons } from "./workspace.js";
+import { parseRoute, navigation } from "./novice.js";
 import {
   PublishingUI,
   publishingPage,
@@ -95,8 +96,12 @@ installLocalBrowserLinks(document, request, toast);
 async function render() {
   const previousPage = page;
   const current = viewRequests.begin();
-  page = location.hash.slice(1) || "tasks";
-  if (!views.pages.some((p) => p[0] === page)) page = "tasks";
+  const parsed = parseRoute(location.hash, views.pages);
+  page = parsed.page;
+  if (page === 'community' && community.tab !== parsed.tab) {
+    community.tab = parsed.tab;
+    community.clear();
+  }
   const route = views.pages.find((p) => p[0] === page),
     activePage = route[3] || page;
   if (previousPage !== page) {
@@ -109,13 +114,7 @@ async function render() {
   document.querySelector("#page-label").textContent = views.pages.find(
     (p) => p[0] === page,
   )[2];
-  document.querySelector("#nav").innerHTML = views.pages
-    .filter((p) => !p[3])
-    .map(
-      ([id, icon, title]) =>
-        `<a href="#${id}" class="${id === activePage ? "active" : ""}" ${id === activePage ? 'aria-current="page"' : ""}><span>${communityIcon(routeIcons[id])}</span>${title}</a>`,
-    )
-    .join("");
+  document.querySelector("#nav").innerHTML = navigation(activePage, community.tab, views.pages, routeIcons);
   document.querySelector("#version").textContent =
     "v" + state.version + " · " + state.revision.slice(0, 8);
   document.querySelector('[data-action="launch"]').hidden =
