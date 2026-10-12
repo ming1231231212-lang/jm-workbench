@@ -37,6 +37,27 @@ def test_reply_preserves_text_target_and_source(ctx):
     assert p['payload']['body']=='针对这个具体问题提供一个解决思路'
 
 
+def test_publish_timeout_never_retries_and_retains_unknown_receipt(ctx):
+    s,f,a,now=ctx;pid=reply(s,a);s.launch(pid);f.fail=TimeoutError('hung browser')
+    s.tick()
+    job=s.jobs(pid)[0]
+    assert job['state']=='unknown' and job['receipt']['reason']=='deadline_exceeded'
+    assert job['receipt']['submitted'] is None
+    now[0]+=86400; s.tick()
+    assert len(f.sent)==1
+    assert s.state()['risk'][0]['platform']=='tieba'
+
+
+def test_read_only_timeout_is_not_counted_as_a_write(ctx):
+    s,f,a,now=ctx;pid=reply(s,a);s.launch(pid)
+    def timeout(*args):raise TimeoutError('hung browser')
+    f.check=timeout;s.tick()
+    job=s.jobs(pid)[0]
+    assert job['state']=='queued' and job['started']==0
+    assert job['receipt']['submitted'] is False
+    assert not f.sent and not s.state()['risk']
+
+
 def test_same_thread_even_changed_comment_rejected(ctx):
     s,_,a,_=ctx;s.launch(reply(s,a))
     with pytest.raises(ValueError,match='重复'):

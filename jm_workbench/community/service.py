@@ -10,6 +10,7 @@ from pathlib import Path
 from ..core.db import dumps, uid
 from ..core.config import revision
 from .adapters import CommunityAdapter, NotSubmitted, PreflightStopped, RetryablePreflight, IdentityChanged
+from .bounded import BoundedCommunityAdapter
 from .registry import PLATFORMS, platform, destination, compose_url, safe_post_url, tieba_thread_url, thread_url
 from .secrets import seal, unseal
 
@@ -25,8 +26,9 @@ def content_key(text):
 class Community:
     def __init__(self,cfg,adapter=None,clock=time.time):
         self.cfg,self.store,self.clock=cfg,cfg.store,clock
-        self.adapter=adapter or CommunityAdapter(cfg.config)
+        self.adapter=adapter if adapter is not None else BoundedCommunityAdapter(cfg.config)
         self.shutdown=threading.Event();self.step_lock=threading.Lock();self.thread=None
+        self.last_cycle_at=0
         with self.store.connect() as db:
             db.executescript('''
             CREATE TABLE IF NOT EXISTS community_accounts(id TEXT PRIMARY KEY, data TEXT,
@@ -231,7 +233,8 @@ class Community:
         return {'browser_open_mode':self.cfg.config.values.get('browser_open_mode','daily'),'platforms':list(PLATFORMS.values()),'accounts':[self.account(r['id']) for r in self.store.rows('SELECT id FROM community_accounts ORDER BY rowid')],
                 'backfill':self.backfill.state(),'posts':posts,'plans':self.daily.state(),'risk':self.store.rows('SELECT * FROM community_risk'),
                 'summary':summary,'post_total':self.store.rows('SELECT COUNT(*) AS n FROM community_posts')[0]['n'],
-                'post_limit':200,'server_time':now,
+                'post_limit':200,'server_time':now,'executor':self.runtime(),
+                'queue_counts':{r['state']:r['n'] for r in self.store.rows('SELECT state,COUNT(*) AS n FROM community_jobs GROUP BY state')},
                 'worker':bool(self.thread and self.thread.is_alive()),'limits':{'interval_seconds':1800,'per_platform_24h':5,**{p:{'per_24h':6,'threads_per_day':1,'replies_per_day':5,'timezone':'Asia/Shanghai'} for p in ('tieba','juejin','csdn')}}}
 
     def control(self,ident,action):
@@ -331,7 +334,17 @@ class Community:
     def tick(self):
         if not self.step_lock.acquire(blocking=False):return
         try:self._tick()
-        finally:self.step_lock.release()
+        finally:
+            self.last_cycle_at=self.clock()
+            self.step_lock.release()
+
+    def runtime(self):
+        operations=self.adapter.active() if hasattr(self.adapter,'active') else []
+        overdue=any(time.time()>op['deadline_at']+10 for op in operations)
+        alive=bool(self.thread and self.thread.is_alive())
+        return {'status':'attention' if overdue else 'working' if operations else 'ready' if alive else 'stopped',
+                'healthy':alive and not overdue,'operations':operations,'last_cycle_at':self.last_cycle_at,
+                'message':'操作超时，正在停止本次执行' if overdue else operations[0]['label'] if operations else '后台已就绪，按发布安排执行' if alive else '后台未启动，定时发布不会执行'}
 
     def _tick(self):
         now=self.clock()
@@ -380,6 +393,8 @@ class Community:
             if self.shutdown.is_set():raise RetryablePreflight('服务正在停止，尚未提交；恢复后继续检查')
             current=self.store.rows('SELECT message FROM community_jobs WHERE id=?',(job['id'],))[0]
             if current['message'] in ('stop_requested','cancel_requested'):raise InterruptedError(current['message'])
+            with self.store.connect(True) as db:
+                db.execute("UPDATE community_jobs SET message='正在提交并等待平台回执（最长3分钟）',updated=? WHERE id=?",(self.clock(),job['id']))
             receipt=self.adapter.publish(a,a['_secret'],s['payload'],s['destination'])
             if not receipt.get('post_id') or not receipt.get('url'):raise RuntimeError('missing receipt')
             safe_post_url(p,receipt['url'])
@@ -395,6 +410,9 @@ class Community:
             receipt={'phase':'preflight','submitted':False}
         except NotSubmitted as ex:
             status,message='failed',str(ex)
+        except TimeoutError:
+            status,message='unknown','等待平台回执超时，已终止本次操作并暂停此平台；请核实是否已发布，不会自动重发'
+            receipt={'phase':'submission','submitted':None,'reason':'deadline_exceeded'}
         except Exception:
             status,message='unknown','提交结果不明，已暂停此平台；请到网站核实，禁止自动重发'
         with self.store.connect(True) as db:
@@ -430,4 +448,5 @@ class Community:
 
     def close(self):
         self.shutdown.set()
+        if hasattr(self.adapter,'close'):self.adapter.close()
         if self.thread:self.thread.join(timeout=2)

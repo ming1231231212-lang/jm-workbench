@@ -97,7 +97,8 @@ def create_app(home=None, worker=True, configuration=None, publishing_bridge=Non
 
     @app.get('/api/health')
     def health():
-        return {'app_id': 'jm-workbench', 'name': APP_NAME, 'version': __version__, 'revision': cfg.code_revision, 'worker': worker}
+        return {'app_id': 'jm-workbench', 'name': APP_NAME, 'version': __version__, 'revision': cfg.code_revision, 'worker': worker,
+                'community_executor':community.runtime()}
 
     @app.get('/api/state')
     def state():

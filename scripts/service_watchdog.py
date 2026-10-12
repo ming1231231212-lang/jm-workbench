@@ -90,7 +90,8 @@ class Watchdog:
     @staticmethod
     def expected(data, expected_revision):
         return (data is not None and data.get('app_id') == 'jm-workbench'
-                and data.get('worker') is True and data.get('revision') == expected_revision)
+                and data.get('worker') is True and data.get('revision') == expected_revision
+                and data.get('community_executor',{}).get('healthy',True) is True)
 
     def step(self):
         now, config = self.clock(), self.config()
