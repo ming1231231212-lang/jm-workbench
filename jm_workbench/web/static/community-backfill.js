@@ -1,6 +1,6 @@
 import { escape as e, button as b } from './ui.js';
 const labels = {draft:'正文已补录 · 待执行连接',missing_target:'待匹配原帖',missing_content:'待补充正文',needs_check:'原任务需处理',submitted:'平台已接收',recorded:'人工登记 · 待核验',queued:'已排队'};
-export function backfillView(data) {
+export function backfillView(data, expanded = false) {
   const ledger = data.backfill;
   if (!ledger?.total) return '';
   const groups = new Map();
@@ -9,7 +9,7 @@ export function backfillView(data) {
     if (!groups.has(key)) groups.set(key,{...r,key,thread:0,reply:0,ready:0,submitted:0});
     const g=groups.get(key);g[r.kind]++;g.ready+=Boolean(r.post_id);g.submitted+=r.status==='submitted';
   }
-  return `<section class="panel spaced"><div class="section-heading"><div><h2>历史补发清单 <small>${ledger.total} 项</small></h2><p class="section-description">漏执行的日期与实际发送日期分别记录。补录不会标记为已发布。</p></div></div><div class="capacity-row"><span>已登记缺口</span><b>帖子 ${ledger.threads} · 评论 ${ledger.replies}</b></div><div class="capacity-row"><span>已关联正文 / 原任务</span><b>${ledger.with_content} 项 · 平台已接收 ${ledger.submitted} 项</b></div><details><summary>逐日查看内容与处理原因</summary><div class="table-wrap"><table><thead><tr><th>原计划日期</th><th>平台</th><th>帖子 / 评论缺口</th><th>已关联内容</th><th>操作</th></tr></thead><tbody>${[...groups.values()].map(g=>`<tr><td>${e(g.day)}</td><td>${e(data.platforms.find(p=>p.id===g.platform)?.name||g.platform)}</td><td>${g.thread} / ${g.reply}</td><td>${g.ready} 项</td><td>${b('查看补录','com-backfill-view',g.key,'small')}</td></tr>`).join('')}</tbody></table></div></details><p class="form-note">实际发布继续使用原账号、去重检查及每日额度。缺少连接、原帖或明确回执时会保留待处理状态。</p></section>`;
+  return `<section class="panel spaced"><div class="section-heading"><div><h2>历史补发清单 <small>${ledger.total} 项</small></h2><p class="section-description">漏执行的日期与实际发送日期分别记录。补录不会标记为已发布。</p></div></div><div class="capacity-row"><span>已登记缺口</span><b>帖子 ${ledger.threads} · 评论 ${ledger.replies}</b></div><div class="capacity-row"><span>已关联正文 / 原任务</span><b>${ledger.with_content} 项 · 平台已接收 ${ledger.submitted} 项</b></div>${b(expanded ? "收起逐日清单" : "逐日查看内容与处理原因", "com-backfill-toggle", "", "small")}${expanded ? `<div class="table-wrap"><table><thead><tr><th>原计划日期</th><th>平台</th><th>帖子 / 评论缺口</th><th>已关联内容</th><th>操作</th></tr></thead><tbody>${[...groups.values()].map(g=>`<tr><td>${e(g.day)}</td><td>${e(data.platforms.find(p=>p.id===g.platform)?.name||g.platform)}</td><td>${g.thread} / ${g.reply}</td><td>${g.ready} 项</td><td>${b('查看补录','com-backfill-view',g.key,'small')}</td></tr>`).join('')}</tbody></table></div>` : ""}<p class="form-note">实际发布继续使用原账号、去重检查及每日额度。缺少连接、原帖或明确回执时会保留待处理状态。</p></section>`;
 }
 export function backfillDetail(data,key) {
   const [planId,day]=key.split('|');

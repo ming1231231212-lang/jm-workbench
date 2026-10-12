@@ -402,6 +402,11 @@ export class CommunityWorkspace extends CommunityUI {
     this.wizard = null;
   }
   async handle(action, id) {
+    if (action === "com-backfill-toggle") {
+      this.filters.backfillOpen = !this.filters.backfillOpen;
+      this.repaint();
+      return;
+    }
     if (action === "com-backfill-view") {
       this.showForm(backfillDetail(this.data, id));
       return;
