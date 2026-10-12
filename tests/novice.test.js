@@ -3,6 +3,7 @@ import assert from 'node:assert/strict';
 import {parseRoute,navigation,overview} from '../jm_workbench/web/static/novice.js';
 import {pages} from '../jm_workbench/web/static/views.js';
 import {routeIcons} from '../jm_workbench/web/static/workspace.js';
+import {fetchWithDeadline} from '../jm_workbench/web/static/network.js';
 test('first visit and old community links land on today; existing tool links survive',()=>{
   assert.deepEqual(parseRoute('',pages),{page:'community',tab:'overview'});
   assert.equal(parseRoute('#community/content',pages).tab,'content');
@@ -26,4 +27,11 @@ test('today uses complete server counts; history missing targets are actionable 
 test('stopped worker never claims automatic execution is ready',()=>{
   const html=overview({executor:{status:'stopped',message:'后台未启动'},posts:[],plans:[]});
   assert.ok(html.includes('后台未启动')&&html.includes('网页能打开不代表'));
+});
+test('read and write timeouts explain uncertainty differently without retries',async()=>{
+  let calls=0;
+  const hanging=async (path,opts)=>{calls++;return new Promise((resolve,reject)=>opts.signal.addEventListener('abort',()=>reject(Error('aborted'))));};
+  await assert.rejects(fetchWithDeadline('/state',{},hanging,10),/读取状态超时/);
+  await assert.rejects(fetchWithDeadline('/publish',{method:'POST'},hanging,10),/不要重复提交/);
+  assert.equal(calls,2);
 });

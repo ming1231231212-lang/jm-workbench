@@ -82,12 +82,16 @@ class BoundedCommunityAdapter:
     def __init__(self, config, boundary=None):
         self.local = CommunityAdapter(config)
         self.boundary = boundary or ProcessBoundary(config.home)
+        self.operation_lock=threading.Lock()
 
     def _call(self, action, *args):
+        if not self.operation_lock.acquire(blocking=False):
+            raise RetryablePreflight('浏览器正在处理其他操作，当前动作未提交；请稍后检查')
         try: return self.boundary.call(action, args, LIMITS[action])
         except TimeoutError:
             if action == 'publish': raise
             raise RetryablePreflight(LABELS[action]+'超时，未提交；稍后会重新检查连接') from None
+        finally:self.operation_lock.release()
 
     def ensure_connection(self, account): return self._call('ensure_connection', account)
     def check(self, account, secret): return self._call('check', account, secret)

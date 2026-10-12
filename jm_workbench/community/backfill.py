@@ -171,7 +171,7 @@ class Backfill:
             states = {jobs[-1]['state']} if jobs else set()
             r['status'] = ('needs_check' if states & {'unknown','failed','paused','cancelled'} else
                 'submitted' if 'submitted' in states else 'recorded' if 'recorded' in states else
-                'queued' if states & {'queued','running'} else 'draft' if r['post_id'] else
+                'running' if 'running' in states else 'queued' if 'queued' in states else 'draft' if r['post_id'] else
                 'missing_target' if r['kind']=='reply' else 'missing_content')
             r['jobs'] = jobs
             if jobs:r['message'] = jobs[-1].get('message') or r['message']

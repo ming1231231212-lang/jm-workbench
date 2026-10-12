@@ -5,6 +5,7 @@ import { CommunityWorkspace } from "./community-v2.js";
 import { icon as communityIcon } from "./community-icons.js";
 import { initializeWorkspace, ViewRequests, routeIcons } from "./workspace.js";
 import { parseRoute, navigation } from "./novice.js";
+import { fetchWithDeadline } from "./network.js";
 import {
   PublishingUI,
   publishingPage,
@@ -82,7 +83,7 @@ async function request(path, body, method = "POST") {
           },
           body: JSON.stringify(body),
         };
-  const response = await fetch(path, opts);
+  const response = await fetchWithDeadline(path, opts);
   let result;
   try {
     result = await response.json();
@@ -95,6 +96,7 @@ async function request(path, body, method = "POST") {
 installLocalBrowserLinks(document, request, toast);
 async function render() {
   const previousPage = page;
+  const previousTab = community.tab;
   const current = viewRequests.begin();
   const parsed = parseRoute(location.hash, views.pages);
   page = parsed.page;
@@ -104,7 +106,7 @@ async function render() {
   }
   const route = views.pages.find((p) => p[0] === page),
     activePage = route[3] || page;
-  if (previousPage !== page) {
+  if (previousPage !== page || (page === 'community' && previousTab !== community.tab)) {
     shell.closeMenu();
     content.innerHTML =
       '<div class="empty" role="status">正在读取' + e(route[2]) + "…</div>";

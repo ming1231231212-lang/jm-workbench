@@ -48,7 +48,7 @@ def main():
     checks=[];errors=[];external=[];console_errors=[]
     def check(name,ok=True):assert ok,name;checks.append(name)
     with sync_playwright() as pw:
-        browser=pw.chromium.connect_over_cdp(endpoint(Path(r'D:\Codex\个人工作台\项目\Codex-Chrome\User Data')),timeout=15000)
+        browser=pw.chromium.launch(headless=True)
         context=browser.new_context(viewport={'width':1440,'height':1000},accept_downloads=True,reduced_motion='reduce');page=context.new_page();page.set_default_timeout(10000)
         page.on('pageerror',lambda error:errors.append(str(error)))
         page.on('console',lambda msg:console_errors.append(msg.text) if msg.type=='error' else None)
@@ -67,15 +67,16 @@ def main():
             if page.locator('#dialog').evaluate('el=>el.open'):click('close-dialog')
             if page.locator('#community-drawer').evaluate('el=>el.open'):click('com-v2-close')
             expect(page.locator('#community-drawer')).not_to_be_visible()
-        def tab(name):close();click('com-tab',name)
+        def tab(name):
+            close();page.goto(f'http://127.0.0.1:{port}/#community/'+name);expect(page.locator('#content h1')).to_be_visible()
         def snap(name):
             page.locator('#toast').evaluate('el=>el.hidden=true')
             page.screenshot(path=str(output/(name+'.png')),full_page=True)
         def wizard_next():page.locator('#com-v2-wizard button[value="next"]').click();expect(page.locator('body')).to_have_attribute('aria-busy','false')
         try:
-            page.goto(f'http://127.0.0.1:{port}/#community');expect(page.locator('[data-plan-row]')).to_have_count(3)
-            check('three primary community views',page.locator('.view-tabs button').count()==3)
-            check('six original module routes remain',page.locator('#nav a').count()==6)
+            page.goto(f'http://127.0.0.1:{port}/#community/plans');expect(page.locator('[data-plan-row]')).to_have_count(3)
+            check('four simple primary views',page.locator('#nav > a').count()==4)
+            check('original tools remain under more tools',page.locator('#nav .more-tools a').count()==5)
             snap('plans-desktop')
             page.locator('#community-search').fill('不存在的计划');expect(page.get_by_text('没有匹配的计划')).to_be_visible()
             check('live search retains focus',page.locator('#community-search').evaluate('el=>document.activeElement===el'))
@@ -109,7 +110,7 @@ def main():
             click('com-plan-pause',new['id']);linked=next(p for p in s.state()['posts'] if p.get('plan_id')==new['id']);check('plan pause holds queued jobs',linked['jobs'][0]['state']=='paused')
             click('com-v2-drawer-tab','content');click('com-view',linked['id'],scope='#community-drawer');expect(page.locator('.article-preview')).to_contain_text('本地测试每日计划')
             check('plan to exact content preserves full original body')
-            click('com-resume',linked['id']);s.tick();close();click('refresh');click('com-tab','content');click('com-view',linked['id']);expect(page.locator('#community-drawer')).to_contain_text('已提交 · 待核验')
+            click('com-resume',linked['id']);s.tick();close();click('refresh');tab('content');click('com-view',linked['id']);expect(page.locator('#community-drawer')).to_contain_text('已提交 · 待核验')
             check('fake execution receipt is not shown as public visibility',len(fake.sent)==1 and page.locator('#community-drawer').get_by_text('公开可见性：未核验').count()==1)
             close();click('com-v2-kind','reply');expect(page.locator('[data-post-row]')).to_have_count(5)
             reply=next(p for p in s.state()['posts'] if p['payload']['kind']=='reply')
@@ -135,8 +136,8 @@ def main():
             tab('accounts');click('com-new-account');page.locator('[name="name"]').fill('临时重复备注账号');page.locator('#com-account-form button.primary').click();expect(page.locator('#dialog')).not_to_be_visible();temp=next(a for a in s.state()['accounts'] if a['name']=='临时重复备注账号');click('com-v2-account',temp['id']);click('com-delete-account',temp['id']);click('close-dialog');check('cancel deletion retains record',any(a['id']==temp['id'] for a in s.state()['accounts']))
             click('com-delete-account',temp['id']);page.locator('#com-delete-account-form button.danger').click();expect(page.locator('#dialog')).not_to_be_visible();check('remove unused account leaves originals',len(s.state()['accounts'])==4)
             click('com-v2-account',accounts['tieba']);click('com-delete-account',accounts['tieba']);page.locator('#com-delete-account-form button.danger').click();expect(page.locator('#dialog .community-operation-error')).to_contain_text('引用');check('referenced accounts remain protected with inline explanation',len(s.state()['accounts'])==4);close()
-            click('com-v2-account',accounts['juejin']);fake.offline.clear();click('com-check',accounts['juejin']);expect(page.locator('#community-drawer')).to_contain_text('已登录 · 已同步');check('connection recovery does not enable or send',s.daily.get(plans['juejin'])['state']=='paused' and len(fake.sent)==1);close()
-            click('com-v2-account-mode','matrix');expect(page.locator('.matrix tbody tr')).to_have_count(20);check('all 20 platforms retained with real capability labels');snap('accounts-matrix')
+            click('com-v2-account',accounts['juejin']);fake.offline.clear();click('com-check',accounts['juejin']);expect(page.locator('#community-drawer')).to_contain_text('已绑定 · 发布前复查');check('connection recovery does not enable or send',s.daily.get(plans['juejin'])['state']=='paused' and len(fake.sent)==1);close()
+            click('com-v2-account-mode','matrix');expect(page.locator('.matrix tbody tr')).to_have_count(21);check('all 21 platforms retained with real capability labels');snap('accounts-matrix')
             tab('plans');click('com-plan-new');wizard_next()
             page.locator('[name="name"]').fill('启用失败保留草稿测试');page.locator('[name="board"]').fill('人工智能');page.locator('[name="rules_note"]').fill('本地测试：保存成功后如果启用失败，必须保留同一个计划。');wizard_next()
             before=len(s.state()['plans'])
@@ -146,7 +147,7 @@ def main():
             context.unroute('**/api/community/plans/*/enable')
             page.locator('#com-v2-wizard button[value="save"]').click();expect(page.locator('#dialog')).not_to_be_visible()
             check('retry saves same plan instead of duplicating',len(s.state()['plans'])==before+1);close()
-            click('com-v2-density');page.reload();expect(page.locator('body')).to_have_class(re.compile(r'community-dense'));check('density survives reload without storing business data')
+            expect(page.locator('.community-density')).not_to_be_visible();page.reload();expect(page.locator('#content h1')).to_be_visible();check('unnecessary density control is hidden without affecting reload')
             for width,height in [(1440,1000),(1024,800),(390,844)]:
                 page.set_viewport_size({'width':width,'height':height})
                 for name in ['plans','content','accounts']:
@@ -165,6 +166,6 @@ def main():
             errors.append(traceback.format_exc());snap('failure');raise
         finally:
             report={'passed':len(checks),'checks':checks,'errors':errors,'external_requests':external,'console_errors':console_errors,'fake_submissions':len(fake.sent),'output':str(output)}
-            (output/'report.json').write_text(json.dumps(report,ensure_ascii=False,indent=2),encoding='utf-8');print(json.dumps(report,ensure_ascii=False));context.close();server.should_exit=True;thread.join(timeout=5)
+            (output/'report.json').write_text(json.dumps(report,ensure_ascii=False,indent=2),encoding='utf-8');print(json.dumps(report,ensure_ascii=False));context.close();browser.close();server.should_exit=True;thread.join(timeout=5)
 
 if __name__=='__main__':main()

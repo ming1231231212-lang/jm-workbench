@@ -30,6 +30,11 @@ def healthy():
     return {'app_id':'jm-workbench','revision':'test-revision','worker':True}
 
 
+def test_http_online_is_not_executor_health():
+    assert module.Watchdog.expected(healthy(),'test-revision')
+    assert not module.Watchdog.expected({**healthy(),'community_executor':{'healthy':False}},'test-revision')
+
+
 def business_state(store):
     return {table:store.rows('SELECT * FROM '+table) for table in ('runs','attempts','risk','events','reads','objects')}
 

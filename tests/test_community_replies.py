@@ -58,6 +58,20 @@ def test_read_only_timeout_is_not_counted_as_a_write(ctx):
     assert not f.sent and not s.state()['risk']
 
 
+def test_one_platform_timeout_does_not_block_another_platform(ctx):
+    s,f,a,_=ctx;tieba=reply(s,a);s.launch(tieba)
+    other=s.save_account(CommunityAccount(name='other platform',platform='dev',secret='fixture-key'))
+    s.check_account(other['id'])
+    dev=s.save(CommunityPost(request_id='independent-platform',title='Independent task',body='Useful example article',targets=[{'account_id':other['id']}]))['id'];s.launch(dev)
+    def publish(account,*args):
+        if account['platform']=='tieba':raise TimeoutError('timeout')
+        return {'post_id':'ok','url':'https://dev.to/fixture/example','visibility':'unverified'}
+    f.publish=publish;s.tick();s.tick()
+    assert s.jobs(tieba)[0]['state']=='unknown'
+    assert s.jobs(dev)[0]['state']=='submitted'
+    assert {r['platform'] for r in s.state()['risk']}=={'tieba'}
+
+
 def test_same_thread_even_changed_comment_rejected(ctx):
     s,_,a,_=ctx;s.launch(reply(s,a))
     with pytest.raises(ValueError,match='重复'):

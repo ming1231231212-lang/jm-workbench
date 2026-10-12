@@ -52,7 +52,7 @@ def main():
     checks=[];errors=[];external=[];screens=[]
     def check(name,ok=True): assert ok,name;checks.append(name)
     with patch('jm_workbench.services.configuration.endpoint',lambda _: 'ws://127.0.0.1:1234/fake'), sync_playwright() as pw:
-        browser=pw.chromium.connect_over_cdp(endpoint(Path(r'D:\Codex\个人工作台\项目\Codex-Chrome\User Data')))
+        browser=pw.chromium.launch(headless=True)
         context=browser.new_context(viewport={'width':1440,'height':1000},accept_downloads=True,reduced_motion='reduce')
         context.route('**/*',lambda r:r.continue_() if r.request.url.startswith(base+'/') else (external.append(r.request.url),r.abort()))
         page=context.new_page();page.set_default_timeout(10000);expect.set_options(timeout=10000)
@@ -73,7 +73,7 @@ def main():
         try:
             for route in ROUTES:
                 nav(route)
-                check('shared navigation and fonts '+route,page.locator('#nav a svg').count()==6 and page.locator('.sidebar').evaluate('el=>getComputedStyle(el).backgroundColor')=='rgb(25, 37, 44)' and page.locator('body').evaluate('el=>getComputedStyle(el).fontFamily').startswith('"Microsoft YaHei"'))
+                check('shared navigation and fonts '+route,page.locator('#nav a svg').count()==9 and page.locator('.sidebar').evaluate('el=>getComputedStyle(el).backgroundColor')=='rgb(255, 255, 255)' and page.locator('body').evaluate('el=>getComputedStyle(el).fontFamily').startswith('"Microsoft YaHei"'))
                 check('desktop viewport '+route,page.evaluate('document.documentElement.scrollWidth<=innerWidth'))
                 if route in ['tasks','publishing','data','accounts','settings','matrix']:snap('desktop-'+route)
             nav('tasks');click('new-task')
@@ -126,7 +126,7 @@ def main():
             nav('settings');page.locator('#settings-form [name="crawler_root"]').fill(str(out/'test-crawler'));page.locator('#settings-form [name="crawler_python"]').fill(sys.executable);save('#settings-form');expect(page.locator('#toast')).to_contain_text('配置已保存')
             page.reload();expect(page.locator('#settings-form [name="crawler_root"]')).to_have_value(str(out/'test-crawler'));check('global settings persist through reload')
             page.locator('#pub-settings-form [name="publish_gap_minutes"]').fill('45');save('#pub-settings-form');expect(page.locator('#toast')).to_contain_text('保存');page.reload();expect(page.locator('#pub-settings-form [name="publish_gap_minutes"]')).to_have_value('45');check('publishing limits saved independently')
-            nav('tasks');click('com-v2-density');nav('data');expect(page.locator('body')).to_have_class(re.compile('community-dense'));nav('community');expect(page.locator('body')).to_have_class(re.compile('community-dense'));check('density remains consistent across modules and reloads')
+            nav('tasks');expect(page.locator('.community-density')).not_to_be_visible();check('unnecessary density switch hidden from everyday use')
             nav('tasks');held=[]
             page.route('**/api/publishing/state',lambda route:held.append(route))
             page.locator('#nav a[href="#publishing"]').click()
@@ -159,6 +159,6 @@ def main():
         finally:
             (out/'report.json').write_text(json.dumps({'passed':len(checks),'checks':checks,'errors':errors,'external_requests':external,'screenshots':screens,'output':str(out)},ensure_ascii=False,indent=2),encoding='utf-8')
             print(json.dumps({'passed':len(checks),'errors':errors,'output':str(out)},ensure_ascii=False))
-            context.close();server.should_exit=True;thread.join(5);sock.close()
+            context.close();browser.close();server.should_exit=True;thread.join(5);sock.close()
 
 if __name__=='__main__': main()

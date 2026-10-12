@@ -66,3 +66,31 @@ def test_close_terminates_only_boundary_owned_processes():
     boundary.close(); thread.join(3)
     assert not thread.is_alive()
     assert errors and boundary.active() == []
+
+
+def test_real_worker_protocol_classifies_unsupported_auto_check_without_browser(tmp_path):
+    boundary=ProcessBoundary(tmp_path)
+    from jm_workbench.community.adapters import NotSubmitted
+    with pytest.raises(NotSubmitted,match='网页发布'):
+        boundary.call('check',[{'platform':'wechat_mp'},''],5)
+    assert not boundary.active()
+
+
+def test_timeout_kills_owned_driver_descendants(tmp_path):
+    marker=tmp_path/'child-write'
+    driver='import time,pathlib,sys;time.sleep(1);pathlib.Path(sys.argv[1]).write_text("late")'
+    parent='import subprocess,sys,time;subprocess.Popen([sys.executable,"-c",sys.argv[1],sys.argv[2]]);time.sleep(30)'
+    boundary=ProcessBoundary(command=[sys.executable,'-c',parent,driver,str(marker)])
+    with pytest.raises(TimeoutError):boundary.call('publish',[{}],.2)
+    time.sleep(1.1)
+    assert not marker.exists()
+
+
+def test_browser_busy_is_a_proven_unsent_operation(tmp_path):
+    adapter=BoundedCommunityAdapter(Config(tmp_path))
+    adapter.operation_lock.acquire()
+    try:
+        with pytest.raises(RetryablePreflight,match='未提交'):
+            adapter.publish({'platform':'tieba'},'',{},'人工智能')
+        assert not adapter.active()
+    finally:adapter.operation_lock.release()
