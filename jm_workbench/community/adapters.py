@@ -11,6 +11,7 @@ from ..adapters.chrome import endpoint
 from ..adapters.local_browser import open_local_url
 from ..adapters.errors import LocalBrowserError
 from .registry import platform, compose_url, safe_post_url, destination, tieba_thread_url
+from .browser_connection import uses_relay, relay_connection, connect_relay
 
 
 class NotSubmitted(ValueError):
@@ -239,6 +240,21 @@ class CommunityAdapter:
     def __init__(self, config, transport=http_json):
         self.config,self.transport=config,transport
 
+    def connect_browser(self, pw, account):
+        try:
+            if uses_relay(self.config, account):
+                return connect_relay(pw, self.config, account)
+            return pw.chromium.connect_over_cdp(endpoint(account['profile_dir']), timeout=10000)
+        except LocalBrowserError as ex:
+            message=str(ex) if uses_relay(self.config,account) else '原绑定执行连接未就绪；日常 Chrome 登录不代表自动发布已连接'
+            raise PreflightStopped(message) from None
+        except Exception:
+            raise PreflightStopped('账号浏览器连接未完成，请检查原账号执行连接') from None
+
+    def juejin_browser(self):
+        from .juejin import JuejinBrowser
+        return JuejinBrowser(connect=self.connect_browser)
+
     def headers(self, account, secret):
         if not secret:raise NotSubmitted('尚未配置API密钥，请到社区账号填写')
         if '\n' in secret or '\r' in secret:raise NotSubmitted('API密钥格式无效')
@@ -250,8 +266,7 @@ class CommunityAdapter:
             from .csdn import CsdnBrowser
             return CsdnBrowser().run(account,None,'')
         if p=='juejin':
-            from .juejin import JuejinBrowser
-            return JuejinBrowser().run(account,None,'')
+            return self.juejin_browser().run(account,None,'')
         if p=='tieba':
             return self.tieba(account, None, '')
         if not platform(p)['automatic']:raise NotSubmitted('此平台使用网页发布，不提供自动身份核验')
@@ -270,11 +285,10 @@ class CommunityAdapter:
             from .csdn import CsdnBrowser
             return CsdnBrowser().discover(account,boards)
         if account['platform']=='juejin':
-            from .juejin import JuejinBrowser
-            return JuejinBrowser().discover(account,boards)
+            return self.juejin_browser().discover(account,boards)
         from playwright.sync_api import sync_playwright
         with sync_playwright() as pw:
-            browser=pw.chromium.connect_over_cdp(endpoint(account['profile_dir']),timeout=10000)
+            browser=self.connect_browser(pw,account)
             context=browser.contexts[0]
             if tieba_existing_identity(context)!=account['identity']:raise NotSubmitted('候选读取前身份变化')
             page=context.new_page();links=[];result=[];buckets=[]
@@ -314,8 +328,7 @@ class CommunityAdapter:
             from .csdn import CsdnBrowser
             return CsdnBrowser().run(account,payload,target)
         if p=='juejin':
-            from .juejin import JuejinBrowser
-            return JuejinBrowser().run(account,payload,target)
+            return self.juejin_browser().run(account,payload,target)
         if payload.get('kind')=='reply':
             if p!='tieba':raise NotSubmitted('该平台尚未适配评论发布')
             target=tieba_thread_url(target)
@@ -364,6 +377,9 @@ class CommunityAdapter:
     def ensure_connection(self, account):
         """Restore only the bound local profile, never a different account/IP."""
         if account['platform'] not in ('tieba','juejin','csdn'):return
+        if uses_relay(self.config,account):
+            try:relay_connection(self.config,account);return
+            except LocalBrowserError as ex:raise PreflightStopped(str(ex)) from None
         try:endpoint(account['profile_dir']);return
         except LocalBrowserError:pass
         if self.config.values.get('browser_open_mode', 'daily') != 'account':
@@ -377,11 +393,8 @@ class CommunityAdapter:
 
     def tieba(self, account, payload, target):
         from playwright.sync_api import sync_playwright
-        try:ws=endpoint(account['profile_dir'])
-        except LocalBrowserError:raise NotSubmitted('原绑定执行连接未就绪；日常 Chrome 登录不代表自动发布已连接') from None
         with sync_playwright() as pw:
-            try:browser=pw.chromium.connect_over_cdp(ws,timeout=10000)
-            except Exception:raise NotSubmitted('账号浏览器连接超时，请检查该账号Chrome是否仍在运行') from None
+            browser=self.connect_browser(pw,account)
             if not browser.contexts:raise NotSubmitted('账号浏览器尚未就绪，请稍后检查')
             context=browser.contexts[0]
             if payload is None:return tieba_existing_identity(context)

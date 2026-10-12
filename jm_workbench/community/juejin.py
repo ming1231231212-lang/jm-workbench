@@ -41,9 +41,11 @@ def identity(page):
     avatar = page.locator('header .avatar-wrapper')
     try:
         avatar.wait_for(state='visible', timeout=10000)
-        links = page.locator('header .nav-item.menu a[href*="/user/"]')
+        # Only the signed-in avatar menu, never an article author's profile link.
+        links = page.locator('header .nav-item.menu a[href*="/user/"], header a.open-menu-page[href*="/user/"], header a.username[href*="/user/"]')
         if not links.count():
             avatar.click(timeout=5000)
+        links.first.wait_for(state='attached', timeout=5000)
         hrefs = links.evaluate_all('(xs)=>xs.map(x=>x.getAttribute("href"))')
         ids = {m.group(1) for h in hrefs if (m := re.fullmatch(r'/user/([1-9][0-9]+)(?:/posts)?', h))}
         if len(ids) != 1:
@@ -231,19 +233,23 @@ def configure_article(page, payload, target):
 
 
 class JuejinBrowser:
+    def __init__(self, connect=None):
+        self.connector = connect
+
+    def connect(self, pw, account):
+        if self.connector:
+            return self.connector(pw, account)
+        try:
+            return pw.chromium.connect_over_cdp(endpoint(account['profile_dir']), timeout=10000)
+        except Exception:
+            raise PreflightStopped('掘金账号浏览器未连接，请先登录 / 打开') from None
+
     def run(self, account, payload, target):
         from playwright.sync_api import sync_playwright
         if payload:
             validate_payload(payload, target)
-        try:
-            ws = endpoint(account['profile_dir'])
-        except Exception:
-            raise PreflightStopped('掘金账号浏览器未连接，请先登录 / 打开') from None
         with sync_playwright() as pw:
-            try:
-                browser = pw.chromium.connect_over_cdp(ws, timeout=10000)
-            except Exception:
-                raise PreflightStopped('掘金账号Chrome连接未完成') from None
+            browser = self.connect(pw, account)
             context = browser.contexts[0]
             home = context.new_page()
             page = None
@@ -283,7 +289,7 @@ class JuejinBrowser:
         for tag in tags:
             tag_label(tag)
         with sync_playwright() as pw:
-            browser = pw.chromium.connect_over_cdp(endpoint(account['profile_dir']), timeout=10000)
+            browser = self.connect(pw, account)
             page = browser.contexts[0].new_page()
             result, links = [], []
             try:
