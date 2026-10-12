@@ -94,3 +94,16 @@ def test_browser_busy_is_a_proven_unsent_operation(tmp_path):
             adapter.publish({'platform':'tieba'},'',{},'人工智能')
         assert not adapter.active()
     finally:adapter.operation_lock.release()
+
+
+@pytest.mark.skipif(sys.platform!='win32',reason='Windows owned process isolation')
+def test_owned_job_timeout_preserves_an_unrelated_process():
+    import subprocess
+    from jm_workbench.community.windows_job import OwnedJob
+    outside=subprocess.Popen([sys.executable,'-c','import time;time.sleep(10)'],creationflags=subprocess.CREATE_NO_WINDOW|4)
+    group=OwnedJob(outside)
+    try:
+        boundary=ProcessBoundary(command=[sys.executable,'-c','import time;time.sleep(10)'])
+        with pytest.raises(TimeoutError):boundary.call('publish',[{}],.1)
+        assert outside.poll() is None
+    finally:group.terminate();outside.wait(3);group.close()

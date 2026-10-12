@@ -26,12 +26,9 @@ class ProcessBoundary:
         self.closed = False
 
     @staticmethod
-    def terminate(child):
-        if child.poll() is not None: return
-        if os.name == 'nt':
-            subprocess.run(['taskkill', '/PID', str(child.pid), '/T', '/F'],
-                           stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
-                           creationflags=subprocess.CREATE_NO_WINDOW, timeout=5, check=False)
+    def terminate(child, job=None):
+        if job is not None:
+            job.terminate()
         else:
             try: os.killpg(child.pid, signal.SIGKILL)
             except ProcessLookupError: pass
@@ -39,18 +36,25 @@ class ProcessBoundary:
         child.wait(timeout=5)
 
     def call(self, action, args, timeout):
-        settings = {'creationflags':subprocess.CREATE_NO_WINDOW} if os.name == 'nt' else {'start_new_session':True}
+        settings = {'creationflags':subprocess.CREATE_NO_WINDOW | 4} if os.name == 'nt' else {'start_new_session':True}
         with self.lock:
             if self.closed: raise RuntimeError('执行器已停止')
             child = subprocess.Popen(self.command, cwd=ROOT, env={**os.environ, 'PYTHONPATH':str(ROOT)},
                 stdin=subprocess.PIPE, stdout=subprocess.PIPE, stderr=subprocess.PIPE, **settings)
+            job=None
+            if os.name=='nt':
+                from .windows_job import OwnedJob
+                try:job=OwnedJob(child)
+                except Exception:
+                    child.kill();child.communicate(timeout=5)
+                    raise RuntimeError('无法安全启动本次平台操作，未运行提交程序') from None
             self.processes[child.pid] = (child, {'action':action, 'label':LABELS[action],
-                'platform':args[0].get('platform',''), 'started_at':time.time(), 'deadline_at':time.time()+timeout})
+                'platform':args[0].get('platform',''), 'started_at':time.time(), 'deadline_at':time.time()+timeout},job)
         try:
             try:
                 output, _ = child.communicate(json.dumps({'action':action,'args':args}, ensure_ascii=False).encode(), timeout=timeout)
             except subprocess.TimeoutExpired:
-                self.terminate(child)
+                self.terminate(child,job)
                 child.communicate(timeout=2)
                 raise TimeoutError(LABELS[action]+'超时，已停止本次操作') from None
             if child.returncode != 0 or len(output)>2_000_000:
@@ -65,7 +69,8 @@ class ProcessBoundary:
                 if isinstance(ex, NotSubmitted): raise
                 raise RuntimeError('本地执行结果无效') from None
         finally:
-            if child.poll() is None: self.terminate(child)
+            if child.poll() is None: self.terminate(child,job)
+            if job is not None:job.close()
             with self.lock: self.processes.pop(child.pid, None)
 
     def active(self):
@@ -74,8 +79,8 @@ class ProcessBoundary:
     def close(self):
         with self.lock:
             self.closed=True
-            children=[value[0] for value in self.processes.values()]
-        for child in children: self.terminate(child)
+            children=[(value[0],value[2]) for value in self.processes.values()]
+        for child,job in children: self.terminate(child,job)
 
 
 class BoundedCommunityAdapter:
