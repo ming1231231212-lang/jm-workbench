@@ -19,6 +19,9 @@ class Backfill:
               UNIQUE(plan_id,day,kind,slot));
             CREATE UNIQUE INDEX IF NOT EXISTS community_backfill_post
               ON community_backfill(post_id) WHERE post_id!='';
+            CREATE TABLE IF NOT EXISTS community_backfill_continuations(
+              old_job_id TEXT PRIMARY KEY,new_job_id TEXT UNIQUE,post_id TEXT,
+              old_state TEXT,old_message TEXT,created REAL);
             ''')
 
     def _coverage(self, db, plan):
@@ -26,10 +29,12 @@ class Backfill:
         account = plan['payload']['account_id']
         rows = db.execute('''SELECT j.*,i.day FROM community_jobs j
             LEFT JOIN community_plan_items i ON i.post_id=j.post_id
-            WHERE j.account_id=? ORDER BY j.created,j.id''', (account,)).fetchall()
+            WHERE j.account_id=? ORDER BY j.created,j.rowid''', (account,)).fetchall()
         coverage = {}
         from .service import SHANGHAI
+        latest = {r['post_id']:r['id'] for r in rows}
         for r in rows:
+            if latest[r['post_id']] != r['id']:continue
             if not r['day'] and r['state'] not in ('submitted', 'recorded'):
                 continue
             day = r['day'] or datetime.fromtimestamp(r['started'] if r['state']=='submitted' else r['updated'], SHANGHAI).date().isoformat()
@@ -162,15 +167,77 @@ class Backfill:
             ORDER BY b.day,a.id,b.kind,b.slot'''):
             account = json.loads(r.pop('account_data'));r['platform'] = account['platform']
             jobs = self.s.jobs(r['post_id']) if r['post_id'] else []
-            states = {j['state'] for j in jobs}
+            # Earlier attempts remain visible with their original receipts.
+            states = {jobs[-1]['state']} if jobs else set()
             r['status'] = ('needs_check' if states & {'unknown','failed','paused','cancelled'} else
                 'submitted' if 'submitted' in states else 'recorded' if 'recorded' in states else
                 'queued' if states & {'queued','running'} else 'draft' if r['post_id'] else
                 'missing_target' if r['kind']=='reply' else 'missing_content')
             r['jobs'] = jobs
-            if jobs:r['message'] = '；'.join(j['message'] for j in jobs if j.get('message')) or r['message']
+            if jobs:r['message'] = jobs[-1].get('message') or r['message']
             items.append(r)
         return {'items':items,'total':len(items),'threads':sum(r['kind']=='thread' for r in items),
                 'replies':sum(r['kind']=='reply' for r in items),
                 'submitted':sum(r['status']=='submitted' for r in items),
                 'with_content':sum(bool(r['post_id']) for r in items)}
+
+    def queue(self, plan_id):
+        """Explicitly continue only proven-unsent history under the current revision."""
+        from .service import revision
+        with self.s.step_lock:
+            p=self.s.daily.get(plan_id)
+            if p['state']!='enabled':raise ValueError('请先核验并启用原每日计划，再安排历史补发')
+            a=self.s.account(p['payload']['account_id'],True)
+            if hasattr(self.s.adapter,'ensure_connection'):self.s.adapter.ensure_connection(a)
+            self.s.check_account(a['id'])
+            queued=0;skipped=0
+            with self.store.connect(True) as db:
+                current=db.execute('SELECT * FROM community_plans WHERE id=?',(plan_id,)).fetchone()
+                raw=db.execute('SELECT * FROM community_accounts WHERE id=?',(a['id'],)).fetchone()
+                if (current['state']!='enabled' or not json.loads(raw['data'])['enabled'] or
+                    raw['version']!=current['account_version'] or raw['identity']!=current['identity'] or
+                    current['revision']!=self.s.cfg.code_revision or revision()!=self.s.cfg.code_revision):
+                    raise ValueError('计划或账号配置已改变，请重新核验')
+                if db.execute('SELECT 1 FROM community_risk WHERE platform=?',(a['platform'],)).fetchone():
+                    raise ValueError('平台仍有限制或结果不明，不能安排补发')
+                rows=db.execute("SELECT * FROM community_backfill WHERE plan_id=? AND post_id!='' ORDER BY CASE kind WHEN 'thread' THEN 0 ELSE 1 END,day,slot",(plan_id,)).fetchall()
+                for r in rows:
+                    db.execute('SAVEPOINT backfill_queue')
+                    try:
+                        post=db.execute('SELECT * FROM community_posts WHERE id=?',(r['post_id'],)).fetchone()
+                        payload=json.loads(post['payload'])
+                        jobs=db.execute('SELECT * FROM community_jobs WHERE post_id=? ORDER BY created,rowid',(r['post_id'],)).fetchall()
+                        if jobs and jobs[-1]['state'] in ('queued','running','submitted','recorded','manual','unknown'):
+                            continue
+                        old=jobs[-1] if jobs else None
+                        if old:
+                            receipt=json.loads(old['receipt']);snap=json.loads(old['snapshot'])
+                            safe=(old['started']==0 and (not receipt or (receipt.get('phase')=='preflight' and receipt.get('submitted') is False)))
+                            if old['state'] not in ('paused','failed') or not safe or (old['state']=='failed' and not receipt):
+                                raise ValueError('原任务缺少明确未提交证据，保留原记录')
+                            if any(j['started'] or j['state'] in ('submitted','recorded','unknown','manual','running') for j in jobs):
+                                raise ValueError('存在提交或不确定历史，不能自动补发')
+                            if (old['account_id']!=a['id'] or snap['account']['identity']!=raw['identity'] or
+                                snap['account']['version']!=raw['version'] or snap['payload']!=payload or
+                                payload['targets']!=[{'account_id':a['id'],'destination':snap['destination']}]):
+                                raise ValueError('原账号或内容已改变，不能续接历史任务')
+                            db.execute("UPDATE community_jobs SET state='cancelled',message='明确未提交；已建立可追溯的历史补发后续任务',updated=? WHERE id=?",(self.s.clock(),old['id']))
+                            db.execute('DELETE FROM community_claims WHERE job_id=?',(old['id'],))
+                            db.execute("UPDATE community_posts SET state='draft' WHERE id=?",(r['post_id'],))
+                        elif post['state']!='draft':raise ValueError('原内容状态不支持补发')
+                        self.s.launch(r['post_id'],_db=db)
+                        new=db.execute('SELECT id FROM community_jobs WHERE post_id=? ORDER BY created DESC,rowid DESC LIMIT 1',(r['post_id'],)).fetchone()
+                        if old:
+                            db.execute('INSERT INTO community_backfill_continuations VALUES(?,?,?,?,?,?)',
+                                (old['id'],new['id'],r['post_id'],old['state'],old['message'],self.s.clock()))
+                        db.execute('INSERT OR IGNORE INTO community_plan_items VALUES(?,?,?,?,?)',
+                            (plan_id,r['day'],r['kind'],material_id(payload['body']),r['post_id']))
+                        db.execute('UPDATE community_backfill SET message=? WHERE id=?',('已排队；与每日任务共用频率和额度，尚未发布',r['id']))
+                        queued+=1
+                    except ValueError as ex:
+                        db.execute('ROLLBACK TO backfill_queue')
+                        db.execute('UPDATE community_backfill SET message=? WHERE id=?',(str(ex),r['id']))
+                        skipped+=1
+                    finally:db.execute('RELEASE backfill_queue')
+            return {'message':f'已安排{queued}项历史补发，{skipped}项需继续核实；实际结果以平台回执为准',
+                    'queued':queued,'skipped':skipped,'backfill':self.state()}

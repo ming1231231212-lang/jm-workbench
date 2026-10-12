@@ -1,5 +1,5 @@
 import { escape as e, button as b } from './ui.js';
-const labels = {draft:'正文已补录 · 待执行连接',missing_target:'待匹配原帖',missing_content:'待补充正文',needs_check:'原任务需处理',submitted:'平台已接收',recorded:'人工登记 · 待核验',queued:'已排队'};
+const labels = {draft:'正文已补录 · 待安排',missing_target:'待匹配原帖',missing_content:'待补充正文',needs_check:'原任务需处理',submitted:'平台已接收',recorded:'人工登记 · 待核验',queued:'已排队'};
 export function backfillView(data, expanded = false) {
   const ledger = data.backfill;
   if (!ledger?.total) return '';
@@ -17,5 +17,5 @@ export function backfillDetail(data,key) {
   return `<div class="dialog-header"><h2 id="dialog-title">${e(day)} 历史补录</h2>${b('×','close-dialog','','icon-button')}</div>${items.map(r=>{
     const post=data.posts.find(p=>p.id===r.post_id);
     return `<section class="spaced"><p><b>${r.kind==='thread'?'帖子':'评论'} ${r.slot}</b> · ${e(labels[r.status]||r.status)}</p><p class="form-note">${e(r.message)}</p>${post?`<h3>${e(post.payload.title)}</h3><pre class="result-message">${e(post.payload.body)}</pre>${post.payload.kind==='reply'?`<p>原帖：${e(post.payload.targets[0].destination)}</p>`:''}${b('查看原内容与回执','com-view',post.id,'small')}`:'<p class="muted">尚无完整内容；连接后只匹配相关原帖，不生成虚假目标或成功记录。</p>'}</section>`;
-  }).join('')}<div class="dialog-footer">${b('关闭','close-dialog')}${b('核验连接 / 补充原帖','com-backfill-prepare',planId,'primary')}</div>`;
+  }).join('')}<p class="form-note">先启用原每日计划，再安排此平台已备齐内容的历史补发。与日常任务共用每天1篇、5条评论及30分钟间隔；暂停原计划会一起暂停。</p><div class="dialog-footer">${b('关闭','close-dialog')}${b('核验连接 / 补充原帖','com-backfill-prepare',planId)}${b('安排此平台历史补发','com-backfill-queue',planId,'primary')}</div>`;
 }

@@ -20,6 +20,10 @@ def router(service):
     def backfill_prepare(ident:str):
         return service.backfill.prepare(ident)
 
+    @api.post('/backfill/{ident}/queue')
+    def backfill_queue(ident:str):
+        return service.backfill.queue(ident)
+
     @api.post('/plans')
     def save_plan(payload:DailyPlan):return service.daily.save(payload)
 

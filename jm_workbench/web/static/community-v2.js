@@ -411,8 +411,9 @@ export class CommunityWorkspace extends CommunityUI {
       this.showForm(backfillDetail(this.data, id));
       return;
     }
-    if (action === "com-backfill-prepare") {
-      const result = await this.request(`/api/community/backfill/${id}/prepare`, {});
+    if (action === "com-backfill-prepare" || action === "com-backfill-queue") {
+      const operation = action === "com-backfill-queue" ? "queue" : "prepare";
+      const result = await this.request(`/api/community/backfill/${id}/${operation}`, {});
       this.toast(result.message);
       await this.fresh();
       return;

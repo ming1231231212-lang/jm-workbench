@@ -17,3 +17,11 @@ test('expanded historical list remains open across a data refresh',async()=>{
  await ui.handle('com-backfill-toggle','');
  assert.doesNotMatch(backfillView(ui.data,ui.filters.backfillOpen),/2026-10-11/);
 });
+
+test('explicit backfill action requests the queue and displays its real result',async()=>{
+ const calls=[];const ui=new CommunityWorkspace({request:async(path,body)=>{calls.push(path);return {message:'已排队，尚未发布'};}});
+ let message='';ui.toast=m=>message=m;ui.fresh=async()=>{};
+ await ui.handle('com-backfill-queue','plan-id');
+ assert.deepEqual(calls,['/api/community/backfill/plan-id/queue']);
+ assert.match(message,/尚未发布/);
+});
