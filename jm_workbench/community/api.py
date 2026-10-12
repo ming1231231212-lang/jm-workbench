@@ -1,5 +1,5 @@
 from fastapi import APIRouter, Query
-from .models import CommunityAccount, CommunityPost, LinkRecord, ResolveRecord, ClearRecord, DailyPlan
+from .models import CommunityAccount, CommunityPost, LinkRecord, ResolveRecord, ClearRecord, DailyPlan, BackfillInput
 
 
 def router(service):
@@ -7,6 +7,18 @@ def router(service):
 
     @api.get('/state')
     def state():return service.state()
+
+    @api.post('/backfill/preview')
+    def backfill_preview(payload:BackfillInput):
+        return {'items':service.backfill.preview(payload.plan_ids,payload.through_day,payload.replies_per_day)}
+
+    @api.post('/backfill/register')
+    def backfill_register(payload:BackfillInput):
+        return service.backfill.register(payload.plan_ids,payload.through_day,payload.replies_per_day)
+
+    @api.post('/backfill/{ident}/prepare')
+    def backfill_prepare(ident:str):
+        return service.backfill.prepare(ident)
 
     @api.post('/plans')
     def save_plan(payload:DailyPlan):return service.daily.save(payload)

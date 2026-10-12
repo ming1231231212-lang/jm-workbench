@@ -1,4 +1,5 @@
 import math
+from datetime import date
 from typing import Literal
 from pydantic import BaseModel, ConfigDict, Field, SecretStr, field_validator
 from .registry import platform
@@ -161,3 +162,10 @@ class DailyPlan(BaseModel):
     def valid_sources(cls,values):
         from .registry import destination
         return list(dict.fromkeys(destination('tieba',v) for v in values))
+
+
+class BackfillInput(BaseModel):
+    model_config=ConfigDict(extra='forbid')
+    plan_ids: list[str] = Field(min_length=1,max_length=10)
+    through_day: date
+    replies_per_day: int = Field(default=5,ge=0,le=5)

@@ -1,3 +1,4 @@
+import { backfillDetail } from "./community-backfill.js";
 import { CommunityUI } from "./community.js";
 import { escape as e, button as b, field, select } from "./ui.js";
 import { workspace, drawer, currentDay } from "./community-v2-views.js";
@@ -401,6 +402,16 @@ export class CommunityWorkspace extends CommunityUI {
     this.wizard = null;
   }
   async handle(action, id) {
+    if (action === "com-backfill-view") {
+      this.showForm(backfillDetail(this.data, id));
+      return;
+    }
+    if (action === "com-backfill-prepare") {
+      const result = await this.request(`/api/community/backfill/${id}/prepare`, {});
+      this.toast(result.message);
+      await this.fresh();
+      return;
+    }
     if (action === "com-tab") {
       const kind = id === "posts" ? "thread" : id === "replies" ? "reply" : "";
       this.changeView(
@@ -414,7 +425,7 @@ export class CommunityWorkspace extends CommunityUI {
       if (id === "platforms") this.filters.accountMode = "matrix";
       return this.repaint();
     }
-    if (action === "com-view") return this.openDetail("content", id);
+    if (action === "com-view") { if (this.dialog.open) this.dialog.close(); return this.openDetail("content", id); }
     if (action === "com-v2-plan") return this.openDetail("plan", id);
     if (action === "com-v2-account") return this.openDetail("account", id);
     if (action === "com-v2-close")

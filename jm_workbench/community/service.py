@@ -51,6 +51,8 @@ class Community:
                     db.execute('INSERT OR IGNORE INTO community_claims VALUES(?,?,?,?,?,?)',(row['platform'],row['identity'],scope,value,row['id'],row['created']))
         from .daily import DailyPlans
         self.daily=DailyPlans(self)
+        from .backfill import Backfill
+        self.backfill=Backfill(self)
 
     def account(self,ident,private=False):
         rows=self.store.rows('SELECT * FROM community_accounts WHERE id=?',(ident,))
@@ -227,7 +229,7 @@ class Community:
             key='recorded' if row['state']=='recorded' else row['kind']+'_submitted'
             if key in summary:summary[key]+=row['n']
         return {'browser_open_mode':self.cfg.config.values.get('browser_open_mode','daily'),'platforms':list(PLATFORMS.values()),'accounts':[self.account(r['id']) for r in self.store.rows('SELECT id FROM community_accounts ORDER BY rowid')],
-                'posts':posts,'plans':self.daily.state(),'risk':self.store.rows('SELECT * FROM community_risk'),
+                'backfill':self.backfill.state(),'posts':posts,'plans':self.daily.state(),'risk':self.store.rows('SELECT * FROM community_risk'),
                 'summary':summary,'post_total':self.store.rows('SELECT COUNT(*) AS n FROM community_posts')[0]['n'],
                 'post_limit':200,'server_time':now,
                 'worker':bool(self.thread and self.thread.is_alive()),'limits':{'interval_seconds':1800,'per_platform_24h':5,**{p:{'per_24h':6,'threads_per_day':1,'replies_per_day':5,'timezone':'Asia/Shanghai'} for p in ('tieba','juejin','csdn')}}}

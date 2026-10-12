@@ -141,7 +141,8 @@ class DailyPlans:
                 deadline=datetime.fromisoformat(row['day']).replace(tzinfo=SHANGHAI)+timedelta(days=1,hours=payload['hour'],minutes=payload['minute'])
                 if self.s.clock()>=deadline.timestamp():
                     db.execute("""UPDATE community_jobs SET state='cancelled',message='已到下一日计划时间，不积压补发' WHERE state='queued'
-                      AND post_id IN (SELECT post_id FROM community_plan_items WHERE plan_id=? AND day=?)""",(row['plan_id'],row['day']))
+                      AND post_id IN (SELECT post_id FROM community_plan_items WHERE plan_id=? AND day=?)
+                      AND post_id NOT IN (SELECT post_id FROM community_backfill WHERE post_id!='')""",(row['plan_id'],row['day']))
         for p in self.store.rows("SELECT id FROM community_plans WHERE state='enabled'"):
             self.prepare(p['id'])
 
@@ -181,6 +182,7 @@ class DailyPlans:
                 if hasattr(self.s.adapter,'ensure_connection'):self.s.adapter.ensure_connection(self.s.account(a['id'],True))
                 self.s.check_account(a['id'])
                 used={r['material'] for r in self.store.rows('SELECT material FROM community_plan_items WHERE plan_id=?',(ident,))}
+                used.update(material_id(json.loads(r['payload'])['body']) for r in self.store.rows('SELECT p.payload FROM community_backfill b JOIN community_posts p ON p.id=b.post_id WHERE b.plan_id=?',(ident,)))
                 targets={r['value'] for r in self.store.rows("SELECT value FROM community_claims WHERE platform=? AND identity=? AND scope='reply_target'",(a['platform'],a['identity']))}
                 existing=self.store.rows('SELECT kind FROM community_plan_items WHERE plan_id=? AND day=?',(ident,day))
                 created={k:sum(r['kind']==k for r in existing) for k in ('thread','reply')}

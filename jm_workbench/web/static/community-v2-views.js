@@ -1,3 +1,4 @@
+import { backfillView } from "./community-backfill.js";
 import { escape as e, button as b, time, empty } from "./ui.js";
 import { icon } from "./community-icons.js";
 import {
@@ -100,7 +101,7 @@ export function plansView(data, u) {
             "primary",
           ),
         )
-  }</section><div class="below-grid"><section class="below-panel"><div class="panel-label"><h3>最近结果</h3>${small("查看全部 " + icon("arrow-up-right"), "com-tab", "content", "quiet")}</div>${
+  }</section>${backfillView(data)}<div class="below-grid"><section class="below-panel"><div class="panel-label"><h3>最近结果</h3>${small("查看全部 " + icon("arrow-up-right"), "com-tab", "content", "quiet")}</div>${
     data.posts
       .filter((p) => p.jobs?.length)
       .slice(0, 2)
