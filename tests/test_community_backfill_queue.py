@@ -74,3 +74,18 @@ def test_existing_and_backfill_share_real_daily_budget(ctx):
     assert len(f.sent)==6
     assert sum(x[0]['kind']=='thread' for x in f.sent)==1
     assert s.backfill.state()['submitted']==6
+
+
+def test_daily_preparation_prioritizes_backfill_without_new_jobs(ctx):
+    s,f,a,n,p=history(ctx);s.backfill.queue(p)
+    before=s.store.rows('SELECT id FROM community_jobs ORDER BY id')
+    assert '优先执行历史补发' in s.daily.prepare(p)['message']
+    assert s.store.rows('SELECT id FROM community_jobs ORDER BY id')==before
+    assert s.daily.state()[0]['days'][0]['counts']['thread']['submitted']==0
+
+
+def test_comment_terms_scattered_across_article_do_not_match():
+    from jm_workbench.community.daily import eligible
+    rule={'terms':['API','错误'],'require_question':False}
+    assert not eligible(rule,{'title':'AI框架对比','excerpt':'本文首先介绍 API 设计。另一个完全不同的话题是团队沟通错误。'})
+    assert eligible(rule,{'title':'API错误分类','excerpt':'讨论参数错误、授权失败和服务异常如何区分。'})

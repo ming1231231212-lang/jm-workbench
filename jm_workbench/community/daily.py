@@ -20,7 +20,10 @@ def eligible(rule,candidate):
     if len(candidate['excerpt'].strip())<15:return False
     if re.search(r'网盘|代充|返佣|加群|拼团|加微|招代理|破解版|购买链接',text):return False
     if not all(word.casefold() in text for word in rule['terms']):return False
-    if not rule['require_question']:return True
+    # Keywords scattered across a long article do not establish one relevant topic.
+    if not rule['require_question']:
+        parts=re.split(r'[\n。.!！?？]',text)
+        return any(len(part)<=240 and all(word.casefold() in part for word in rule['terms']) for part in parts)
     # A question elsewhere in a long article is not evidence of this problem.
     # Keep the matching terms and the question in the same concrete sentence.
     sentences=re.findall(r'[^\n。.!！?？]+[。.!！?？]?',text)
@@ -174,6 +177,16 @@ class DailyPlans:
             if reason:
                 with self.store.connect(True) as db:db.execute("UPDATE community_plans SET state='paused',message=?,updated=? WHERE id=?",(reason,now,ident))
                 return {'message':reason}
+            pending=self.store.rows("""SELECT COUNT(*) AS n FROM community_backfill b
+                JOIN community_jobs j ON j.post_id=b.post_id
+                WHERE b.plan_id=? AND j.state IN ('queued','running')""",(ident,))[0]['n']
+            if pending:
+                message=f'优先执行历史补发 {pending} 项；与今天共用每日额度，暂不新增普通队列'
+                with self.store.connect(True) as db:
+                    db.execute("INSERT INTO community_plan_days VALUES(?,?,'waiting',?,?,?) ON CONFLICT(plan_id,day) DO UPDATE SET state='waiting',message=excluded.message,updated=excluded.updated",(ident,day,message,now,now))
+                    db.execute('INSERT INTO community_plan_checks VALUES(?,?,?,0,?) ON CONFLICT(plan_id,day) DO UPDATE SET next_check=excluded.next_check',(ident,day,now+1800,d.get('replies_per_day',5)))
+                    db.execute('UPDATE community_plans SET message=?,updated=? WHERE id=?',(message,now,ident))
+                return {'message':message}
             with self.store.connect(True) as db:
                 db.execute("INSERT INTO community_plan_days VALUES(?,?,'preparing','正在筛选素材与目标',?,?) ON CONFLICT(plan_id,day) DO UPDATE SET state='preparing',updated=excluded.updated",(ident,day,now,now))
                 db.execute('INSERT OR IGNORE INTO community_plan_checks VALUES(?,?,0,0,?)',(ident,day,d.get('replies_per_day',5)))
