@@ -107,6 +107,7 @@ async function render() {
   const route = views.pages.find((p) => p[0] === page),
     activePage = route[3] || page;
   if (previousPage !== page || (page === 'community' && previousTab !== community.tab)) {
+    community.deactivate();
     shell.closeMenu();
     content.innerHTML =
       '<div class="empty" role="status">正在读取' + e(route[2]) + "…</div>";

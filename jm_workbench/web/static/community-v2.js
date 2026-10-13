@@ -125,6 +125,7 @@ export class CommunityWorkspace extends CommunityUI {
     }
   }
   deactivate() {
+    this.filters.drawer = null;
     document.querySelector("#community-drawer")?.close();
     document.body.classList.remove("community-v2");
   }

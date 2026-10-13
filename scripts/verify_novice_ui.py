@@ -84,6 +84,7 @@ def main():
             before=fake.checks
             nav('overview');expect(page.locator('#community-view')).to_contain_text('每日自动发帖与评论已停用');snap('without-extension-home');check('home explains web workflow without claiming automatic sending')
             nav('accounts');click('com-v2-account',accounts['tieba']);expect(page.locator('#community-drawer [data-action="com-check"]')).to_have_count(0);expect(page.locator('#community-drawer')).to_contain_text('网页发布');close();check('old verified browser account no longer offers pairing checks')
+            click('com-v2-account',accounts['tieba']);page.goto(base+'/#community/content');expect(page.locator('#community-drawer')).not_to_be_visible();page.go_back();expect(page.locator('#content h1')).to_have_text('平台账号');expect(page.locator('#community-drawer')).not_to_be_visible();check('hash navigation and browser back close stale detail drawers')
             s.launch(draft);job=s.jobs(draft)[0]
             with s.store.connect(True) as db:db.execute("UPDATE community_jobs SET state='paused' WHERE id=?",(job['id'],))
             nav('content');click('com-v2-kind','reply');click('com-view',draft);expect(page.locator('#community-drawer [data-action="com-resume"]')).to_have_count(0)
