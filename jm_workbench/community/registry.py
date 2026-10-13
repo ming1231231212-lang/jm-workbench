@@ -46,6 +46,15 @@ def platform(ident):
     return PLATFORMS[ident]
 
 
+def publication_platform(config, ident):
+    """Runtime availability is separate from installed adapter capabilities."""
+    p=platform(ident)
+    if p['mode']!='browser' or config.values.get('community_browser_execution')!='web':return p
+    return {**p,'automatic':False,'mode':'web','mode_label':'网页发布 · 自动控制已停用',
+            'note':'浏览器扩展已取消。复制或导出正文，在日常 Chrome 提交，再登记链接；自动发帖、评论和每日计划已停用。',
+            'capabilities':{**p['capabilities'],'auto_publish':False,'auto_comment':False,'daily_plan':False}}
+
+
 def destination(platform_id, value):
     value = value.strip()
     if platform_id == 'tieba' and (not value or len(value)>50 or re.search(r'[\x00-\x1f<>]', value)):

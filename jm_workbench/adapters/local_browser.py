@@ -36,7 +36,7 @@ def open_local_url(config, url):
                          stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
     except OSError as ex:
         raise LocalBrowserError('本地 Chrome 未能打开，请检查程序路径后重试') from ex
-    return {'message': '已交给日常 Chrome 打开；自动任务连接需单独核验',
+    return {'message': ('已交给日常 Chrome 打开；网页登录和提交在网站完成' if config.values.get('community_browser_execution')=='web' else '已交给日常 Chrome 打开；自动任务连接需单独核验'),
             'browser_mode': 'daily', 'account_verified': False}
 
 

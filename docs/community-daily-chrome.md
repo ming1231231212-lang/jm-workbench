@@ -2,6 +2,14 @@
 
 社区浏览器适配器支持显式绑定的 OpenClaw 扩展中继。原来的独立账号浏览器模式仍按旧配置使用；日常 Chrome 不会自动启动独立资料目录。
 
+## 取消扩展后的网页发布
+
+本机管理员可在 `var/config.local.json` 设置 `community_browser_execution: "web"`，同时移除本工作台的 `community_relay_accounts`、`community_relay_port`、`community_relay_secret_file` 配置。此选项明确停用贴吧、掘金和 CSDN 的浏览器自动检查、查找原帖、发帖、评论和每日自动计划；不会自动回退到旧浏览器。其他已配置的 API 平台不受影响。
+
+运行时平台能力从安装的适配器能力单独派生，页面不会继续显示这些平台支持自动发布。新草稿可创建网页待发布记录、复制/导出正文、打开日常 Chrome、登记链接。已暂停且从未开始、没有任何回执的原任务，可显式 `POST /api/community/jobs/{id}/web` 转为网页发布；保留原账号、正文快照和去重约束。结果不明、已经开始、账号版本变化或存在平台限制时拒绝转换。登记链接只表示用户登记，不能计入自动提交成功。
+
+删除 Chrome 扩展应通过 Chrome 扩展管理页，仅移除指定扩展。不删除 Chrome 资料目录、账号登录、JM 数据或整个 OpenClaw 服务。不在后台自动重新安装或要求配对。
+
 本机管理员配置（仅写入 var/config.local.json，不提交账号或凭据）：
 
 - `community_relay_accounts`：明确授权绑定的社区账号 ID 列表。

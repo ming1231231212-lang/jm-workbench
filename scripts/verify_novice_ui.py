@@ -78,6 +78,17 @@ def main():
                     nav(tab);check(f'{width}px fits '+tab,page.evaluate('document.documentElement.scrollWidth<=innerWidth'))
                     if tab=='overview':snap('today-'+str(width))
             click('com-v2-menu');expect(page.locator('.sidebar')).to_be_visible();page.locator('#nav a[href="#community/content"]').click();expect(page.locator('.community-mobile-menu')).to_have_attribute('aria-expanded','false');check('mobile menu closes after choosing a view')
+            page.set_viewport_size({'width':1440,'height':1050})
+            s.cfg.config.save({'community_browser_execution':'web'})
+            with s.store.connect(True) as db:db.execute("UPDATE community_plans SET state='paused',message='自动控制已取消'")
+            before=fake.checks
+            nav('overview');expect(page.locator('#community-view')).to_contain_text('每日自动发帖与评论已停用');snap('without-extension-home');check('home explains web workflow without claiming automatic sending')
+            nav('accounts');click('com-v2-account',accounts['tieba']);expect(page.locator('#community-drawer [data-action="com-check"]')).to_have_count(0);expect(page.locator('#community-drawer')).to_contain_text('网页发布');close();check('old verified browser account no longer offers pairing checks')
+            s.launch(draft);job=s.jobs(draft)[0]
+            with s.store.connect(True) as db:db.execute("UPDATE community_jobs SET state='paused' WHERE id=?",(job['id'],))
+            nav('content');click('com-v2-kind','reply');click('com-view',draft);expect(page.locator('#community-drawer [data-action="com-resume"]')).to_have_count(0)
+            click('com-to-web',job['id']);expect(page.locator('#community-drawer')).to_contain_text('待网页发布');check('proven unsent historical comment can explicitly switch to web with same text',s.jobs(draft)[0]['id']==job['id'])
+            click('com-open-job',job['id']);click('com-record',job['id']);page.locator('[name="url"]').fill('https://tieba.baidu.com/p/12345678?pid=87654321#87654321');page.locator('#com-record-form button.primary').click();ready();expect(page.locator('#dialog')).not_to_be_visible();expect(page.locator('#community-drawer')).to_contain_text('用户登记，尚未独立核验');close();check('web comment receipt records exact destination without claiming an automatic result',fake.checks==before)
             check('no JavaScript exceptions or external requests',not errors and not external)
         except Exception:
             snap('failure');raise

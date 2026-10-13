@@ -27,3 +27,9 @@ Windows 使用 Job Object：先以暂停状态创建平台子进程，加入本�
 验收入口：`python -m pytest`、`npm test`、`python -m scripts.verify_novice_ui`、`python -m scripts.verify_community_v2_ui`、`python -m scripts.verify_workspace_ui`、`python -m scripts.verify_publishing_ui`。浏览器验收创建无账号的临时 headless Chromium，拦截外部网络，完全不连接历史 Codex-Chrome 或日常 Chrome。结果写入 outputs，真实平台数据只在原 var 中。
 
 升级时先停旧服务及其平台驱动，备份数据库。旧 running 按恢复规则保留 unknown；旧代码下明确未执行的排队项暂停后重新核验原账号。历史补发通过现有可追溯后续任务接口续接，保留旧快照与去重占位。不会修改已提交回执，不会恢复原本手动暂停的计划。
+
+## 无扩展运行
+
+2026-10-13用户决定移除日常 Chrome 的 OpenClaw 扩展。社区配置增加 `community_browser_execution: "web"`，并移除本机工作台中继绑定。平台代理能力保留在代码中，实际运行能力由 `publication_platform` 按当前配置派生；网页发布和自动平台可并存，不修改静态注册表。服务层、每日计划与真实适配器分别拦截自动发送；旧账号身份不能让页面误报执行连接可用。
+
+本机现有贴吧/掘金计划与15项确定未开始的历史任务继续暂停。用户可在内容详情把无回执的原任务显式改为网页发布，原正文快照、账号、身份、去重占位不变；结果不明或平台风险不能通过此入口绕过。网页提交后登记链接，只计为用户登记。工作台不需要配对；这不代表仍能无人值守发送。扩展移除通过 Chrome 自身界面完成，其他扩展、OpenClaw 服务和浏览器资料保留。

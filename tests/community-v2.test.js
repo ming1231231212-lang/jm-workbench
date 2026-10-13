@@ -92,6 +92,27 @@ const plan = {
     },
   ],
 };
+
+test("disabled browser control overrides old verified identity and enabled plan", () => {
+  const a={...data.accounts[0],automatic_execution:false};
+  assert.equal(connectionStatus(a).key,"manual");
+  assert.equal(planStatus(plan,{...data,accounts:[a]}).key,"manual");
+  assert.equal(planStatus(plan,{...data,accounts:[a],risk:[{platform:"tieba",reason:"restriction"}]}).key,"blocked");
+});
+
+test("web-only content offers a safe handoff instead of continuing automatic sending", () => {
+  const d={...data,platforms:[{...data.platforms[0],automatic:false}],posts:[{
+    id:"one",state:"active",payload:{title:"saved",body:"exact body",targets:[{account_id:"a"}]},
+    jobs:[{id:"j",platform:"tieba",account_id:"a",state:"paused",started:0,receipt:{}}],
+  }]};
+  const html=drawer(d,{drawer:{type:"content",id:"one"}});
+  assert.ok(html.includes('data-action="com-to-web"'));
+  assert.ok(!html.includes('data-action="com-resume"'));
+  d.posts[0].jobs[0].started=1;
+  assert.ok(!drawer(d,{drawer:{type:"content",id:"one"}}).includes('data-action="com-to-web"'));
+  d.posts[0].jobs[0].started=0;d.risk=[{platform:"tieba",reason:"restriction"}];
+  assert.ok(!drawer(d,{drawer:{type:"content",id:"one"}}).includes('data-action="com-to-web"'));
+});
 test("platform restriction overrides login and enabled plan without changing data", () => {
   const d = { ...data, risk: [{ platform: "tieba", reason: "restriction" }] };
   assert.equal(planStatus(plan, d).key, "blocked");

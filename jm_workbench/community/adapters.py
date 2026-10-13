@@ -240,7 +240,12 @@ class CommunityAdapter:
     def __init__(self, config, transport=http_json):
         self.config,self.transport=config,transport
 
+    def require_browser_execution(self,account):
+        if account['platform'] in ('tieba','juejin','csdn') and self.config.values.get('community_browser_execution')=='web':
+            raise PreflightStopped('当前使用网页发布，自动浏览器控制已停用；请复制正文，在网站提交后登记链接')
+
     def connect_browser(self, pw, account):
+        self.require_browser_execution(account)
         try:
             if uses_relay(self.config, account):
                 return connect_relay(pw, self.config, account)
@@ -261,6 +266,7 @@ class CommunityAdapter:
         return {'api-key':secret} if account['platform']=='dev' else {'Authorization':'Bearer '+secret}
 
     def check(self, account, secret):
+        self.require_browser_execution(account)
         p=account['platform']
         if p=='csdn':
             from .csdn import CsdnBrowser
@@ -281,6 +287,7 @@ class CommunityAdapter:
 
     def discover(self,account,boards):
         """Read a bounded set of recent public threads; never click interaction buttons."""
+        self.require_browser_execution(account)
         if account['platform']=='csdn':
             from .csdn import CsdnBrowser
             return CsdnBrowser().discover(account,boards)
@@ -323,6 +330,7 @@ class CommunityAdapter:
             return result
 
     def publish(self, account, secret, payload, target):
+        self.require_browser_execution(account)
         p=account['platform']
         if p=='csdn':
             from .csdn import CsdnBrowser
@@ -376,6 +384,7 @@ class CommunityAdapter:
 
     def ensure_connection(self, account):
         """Restore only the bound local profile, never a different account/IP."""
+        self.require_browser_execution(account)
         if account['platform'] not in ('tieba','juejin','csdn'):return
         if uses_relay(self.config,account):
             try:relay_connection(self.config,account);return

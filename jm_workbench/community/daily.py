@@ -71,7 +71,9 @@ class DailyPlans:
             now=self.s.clock();local=datetime.fromtimestamp(now,SHANGHAI);today=local.date().isoformat()
             current=next((d for d in days if d['day']==today),None)
             p['next_action_at']=0;p['next_action']='已暂停，等待主动启用'
-            if p['state']=='enabled':
+            if self.s.account(p['payload']['account_id']).get('automatic_execution') is False:
+                p['next_action']='当前使用网页发布，每日自动发布已停用';p['next_send_at']=0
+            elif p['state']=='enabled':
                 queued=self.store.rows("SELECT j.due,j.message FROM community_jobs j JOIN community_plan_items i ON i.post_id=j.post_id WHERE i.plan_id=? AND j.state='queued' ORDER BY j.due LIMIT 1",(p['id'],))
                 times=[]
                 if queued:times.append((max(now,queued[0]['due']),queued[0]['message'] or '执行已安排的任务'))
@@ -171,6 +173,7 @@ class DailyPlans:
                 return {'message':'等待下次检查；已有任务保持原记录'}
             a=self.s.account(d['account_id'])
             reason=''
+            if a.get('automatic_execution') is False:reason='当前使用网页发布，每日自动发布已停用，内容和历史记录保留'
             if not a['enabled'] or a['version']!=p['account_version'] or a['identity']!=p['identity'] or p['revision']!=self.s.cfg.code_revision:
                 reason='账号或代码版本改变，请检查计划后重新启用'
             if self.store.rows('SELECT 1 FROM community_risk WHERE platform=?',(a['platform'],)):reason='此平台有暂停记录，本日停止发送'

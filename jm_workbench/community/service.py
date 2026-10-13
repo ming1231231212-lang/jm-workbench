@@ -11,7 +11,7 @@ from ..core.db import dumps, uid
 from ..core.config import revision
 from .adapters import CommunityAdapter, NotSubmitted, PreflightStopped, RetryablePreflight, IdentityChanged
 from .bounded import BoundedCommunityAdapter
-from .registry import PLATFORMS, platform, destination, compose_url, safe_post_url, tieba_thread_url, thread_url
+from .registry import PLATFORMS, platform, publication_platform, destination, compose_url, safe_post_url, tieba_thread_url, thread_url
 from .secrets import seal, unseal
 
 ACTIVE = ('queued','running','paused','unknown','manual')
@@ -62,6 +62,7 @@ class Community:
         row=rows[0]
         value={**json.loads(row['data']),'id':row['id'],'version':row['version'],'identity':row['identity'],
                'checked':row['checked'],'secret_configured':bool(row['credential'])}
+        value['automatic_execution']=publication_platform(self.cfg.config,value['platform'])['automatic']
         if private:
             value['profile_dir']=str(self.cfg.config.home/'community-profiles'/ident)
             value['_secret']=unseal(row['credential'])
@@ -107,7 +108,7 @@ class Community:
 
     def check_account(self,ident):
         a=self.account(ident,True)
-        if not platform(a['platform'])['automatic']:raise ValueError('此平台在网站完成发布，无需检查自动执行连接')
+        if not publication_platform(self.cfg.config,a['platform'])['automatic']:raise ValueError('当前使用网页发布，在网站完成提交，无需检查自动执行连接')
         if not a['enabled']:raise ValueError('请先启用此账号')
         try:identity=self.adapter.check(a,a['_secret'])
         except IdentityChanged:raise
@@ -174,7 +175,7 @@ class Community:
                     a={**json.loads(raw['data']),'id':raw['id'],'version':raw['version'],'identity':raw['identity'],'checked':raw['checked']}
                     kind=payload.get('kind','thread')
                     if kind=='reply' and a['platform'] not in ('tieba','juejin','csdn'):raise ValueError('当前仅百度贴吧、掘金、CSDN支持评论发布')
-                    p=platform(a['platform']);dest=thread_url(a['platform'],t['destination']) if kind=='reply' else destination(a['platform'],t['destination'])
+                    p=publication_platform(self.cfg.config,a['platform']);dest=thread_url(a['platform'],t['destination']) if kind=='reply' else destination(a['platform'],t['destination'])
                     if not a['enabled']:raise ValueError(a['name']+'：账号已停用')
                     if len(payload['title'])>p['title_limit']:raise ValueError(p['name']+'标题过长')
                     if a['platform']=='tieba' and ((kind=='thread' and len(payload['title'])<5) or len(payload['body'])>2000):raise ValueError('贴吧标题需5–31字，正文最多2000字')
@@ -187,8 +188,8 @@ class Community:
                     if a['platform']=='x' and len(payload['title']+'\n\n'+payload['body'])>280:raise ValueError('X标题与正文合计最多280字符')
                     if a['platform']=='huggingface' and len(payload['title'])<3:raise ValueError('Hub标题至少3个字符')
                     if a['platform']=='dev' and payload['body'].lstrip().startswith('---'):raise ValueError('DEV正文不能以YAML配置头开头')
+                    if db.execute('SELECT 1 FROM community_risk WHERE platform=?',(a['platform'],)).fetchone():raise ValueError(p['name']+'发布已暂停，请先核实平台限制或结果不明记录')
                     if p['automatic']:
-                        if db.execute('SELECT 1 FROM community_risk WHERE platform=?',(a['platform'],)).fetchone():raise ValueError(p['name']+'发布已暂停，请先核实平台限制或结果不明记录')
                         if not a['identity'] or now-a['checked']>86400:raise ValueError(a['name']+'：请先检查账号登录身份')
                         if p['mode']=='api' and not raw['credential']:raise ValueError(a['name']+'：请配置API授权')
                     identity=a['identity'] or 'manual:'+a['id']
@@ -245,7 +246,9 @@ class Community:
             if key in summary:summary[key]+=row['n']
             if row['state']=='submitted':
                 summary['platforms'].setdefault(row['platform'],{'thread':0,'reply':0})[row['kind']]+=row['n']
-        return {'browser_open_mode':self.cfg.config.values.get('browser_open_mode','daily'),'platforms':list(PLATFORMS.values()),'accounts':[self.account(r['id']) for r in self.store.rows('SELECT id FROM community_accounts ORDER BY rowid')],
+        return {'browser_open_mode':self.cfg.config.values.get('browser_open_mode','daily'),
+                'browser_execution':self.cfg.config.values.get('community_browser_execution','adapter'),
+                'platforms':[publication_platform(self.cfg.config,p) for p in PLATFORMS],'accounts':[self.account(r['id']) for r in self.store.rows('SELECT id FROM community_accounts ORDER BY rowid')],
                 'backfill':self.backfill.state(),'posts':posts,'plans':self.daily.state(),'risk':self.store.rows('SELECT * FROM community_risk'),
                 'summary':summary,'post_total':self.store.rows('SELECT COUNT(*) AS n FROM community_posts')[0]['n'],
                 'post_limit':200,'server_time':now,'executor':self.runtime(),
@@ -265,6 +268,7 @@ class Community:
                 db.execute("UPDATE community_jobs SET message='cancel_requested' WHERE post_id=? AND state='running'",(ident,))
             elif action=='resume':
                 for r in db.execute("SELECT platform,snapshot FROM community_jobs WHERE post_id=? AND state='paused'",(ident,)):
+                    if not publication_platform(self.cfg.config,r['platform'])['automatic']:raise ValueError('当前使用网页发布，请在内容详情中选择“改为网页发布”')
                     if db.execute('SELECT 1 FROM community_risk WHERE platform=?',(r['platform'],)).fetchone():raise ValueError('平台仍有限制或结果不明，不能继续')
                     snapshot=json.loads(r['snapshot']);a=db.execute('SELECT version FROM community_accounts WHERE id=?',(snapshot['account']['id'],)).fetchone()
                     if a['version']!=snapshot['account']['version'] or snapshot['revision']!=self.cfg.code_revision:raise ValueError('原任务配置已失效，请新建草稿')
@@ -334,6 +338,24 @@ class Community:
             db.execute("UPDATE community_jobs SET state='recorded',receipt=?,message='用户登记链接 · 未核验公开可见',updated=? WHERE id=?",(dumps({'url':url,'visibility':'user_reported'}),self.clock(),ident))
         return {'message':'链接已登记，公开可见性尚未核验'}
 
+    def switch_to_web(self,ident):
+        """Explicit handoff of proven unsent work. Keep identity, claims and snapshot."""
+        with self.step_lock,self.store.connect(True) as db:
+            r=db.execute('SELECT * FROM community_jobs WHERE id=?',(ident,)).fetchone()
+            if not r:raise ValueError('任务不存在')
+            if publication_platform(self.cfg.config,r['platform'])['automatic']:raise ValueError('此平台仍使用自动发布，请先暂停并调整发布方式')
+            if db.execute('SELECT 1 FROM community_risk WHERE platform=?',(r['platform'],)).fetchone():raise ValueError('平台存在限制或不确定结果，请先核实')
+            if r['state']=='manual':return {'message':'此任务已在等待网页发布'}
+            receipt=json.loads(r['receipt'])
+            if r['state']!='paused' or r['started'] or receipt:
+                raise ValueError('仅从未开始、无提交回执的暂停任务可改为网页发布；其他结果需先核实')
+            snap=json.loads(r['snapshot'])
+            a=db.execute('SELECT version,identity,data FROM community_accounts WHERE id=?',(r['account_id'],)).fetchone()
+            if not a or not json.loads(a['data'])['enabled'] or a['version']!=snap['account']['version'] or (snap['account']['identity'] and a['identity']!=snap['account']['identity']):
+                raise ValueError('原账号配置已变化，不能直接继续此任务')
+            db.execute("UPDATE community_jobs SET state='manual',message='已改为网页发布；请使用原账号提交后登记链接',updated=? WHERE id=?",(self.clock(),ident))
+        return {'message':'已改为网页发布；原正文、账号和去重记录保留，尚未发送'}
+
     def lock_platform(self,p,reason,db):
         db.execute('INSERT OR REPLACE INTO community_risk VALUES(?,?,?)',(p,reason,self.clock()))
         db.execute("UPDATE community_jobs SET state='paused',message=?,updated=? WHERE platform=? AND state='queued'",(reason,self.clock(),p))
@@ -369,6 +391,8 @@ class Community:
             job=db.execute("SELECT * FROM community_jobs WHERE state='queued' AND due<=? ORDER BY due,created,rowid LIMIT 1",(now,)).fetchone()
             if not job:return
             job=dict(job);s=json.loads(job['snapshot']);p=job['platform']
+            if not publication_platform(self.cfg.config,p)['automatic']:
+                db.execute("UPDATE community_jobs SET state='paused',message='当前使用网页发布，自动执行已停用；请在内容详情改为网页发布',updated=? WHERE id=?",(now,job['id']));return
             if db.execute('SELECT 1 FROM community_risk WHERE platform=?',(p,)).fetchone():
                 db.execute("UPDATE community_jobs SET state='paused',message='平台已暂停' WHERE id=?",(job['id'],));return
             raw=db.execute('SELECT * FROM community_accounts WHERE id=?',(job['account_id'],)).fetchone()

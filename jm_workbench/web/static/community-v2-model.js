@@ -41,6 +41,7 @@ const describe = (key, reason = "") => ({
 });
 export function connectionStatus(a = {}) {
   if (a.enabled === false) return describe("disabled");
+  if (a.automatic_execution === false) return describe("manual", "自动控制已停用，请在网站完成发布");
   if (a.sync_status === "pending")
     return describe("login", a.sync_message || "请检查连接");
   if (a.identity) return describe("connected");
@@ -53,6 +54,7 @@ export function planStatus(plan, data) {
     );
   if (risk) return describe("blocked", risk.reason);
   if (!a || !a.enabled) return describe("disabled", "请检查关联账号");
+  if (a.automatic_execution === false) return {...describe("manual", "当前使用网页发布，每日自动发帖和评论已停用；正文与记录保留"),label:"自动发布已停用"};
   if (a.sync_status === "pending" || !a.identity)
     return describe("login", a.sync_message || "账号身份尚未核验");
   return describe(

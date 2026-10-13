@@ -79,6 +79,9 @@ def router(service):
     @api.post('/jobs/{ident}/open')
     def open_job(ident:str):return service.open_job(ident)
 
+    @api.post('/jobs/{ident}/web')
+    def switch_web(ident:str):return service.switch_to_web(ident)
+
     @api.post('/jobs/{ident}/retry-preflight')
     def retry_preflight(ident:str):return service.retry_preflight(ident)
 
