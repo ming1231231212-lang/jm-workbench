@@ -68,9 +68,10 @@ export function planStatus(plan, data) {
 }
 export function planProgress(plan, day) {
   const d = plan.days?.find((d) => d.day === day);
+  const counts=(kind)=>({submitted:0,recorded:0,waiting:0,failed:0,...d?.counts?.[kind],completed:(d?.counts?.[kind]?.submitted||0)+(d?.counts?.[kind]?.recorded||0)});
   return {
-    thread: { submitted: 0, waiting: 0, failed: 0, ...d?.counts?.thread },
-    reply: { submitted: 0, waiting: 0, failed: 0, ...d?.counts?.reply },
+    thread: counts('thread'),
+    reply: counts('reply'),
     message: d?.message || "今天尚未安排",
     state: d?.state || "",
     replyGoal: d?.reply_goal ?? plan.payload.replies_per_day ?? 5,

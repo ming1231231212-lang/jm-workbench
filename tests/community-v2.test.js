@@ -136,6 +136,20 @@ test("today progress does not borrow yesterday totals", () => {
   assert.equal(planProgress(plan, "2026-10-04").reply.submitted, 2);
   assert.equal(planProgress(plan, "2026-10-05").reply.submitted, 0);
 });
+
+test("registered receipts count in plan progress without claiming automated acceptance", () => {
+  const p={...plan,payload:{...plan.payload,name:"Daily",board:"ai",hour:1,minute:0,source_boards:[]},
+    days:[{day:"2026-10-14",counts:{thread:{submitted:0,recorded:1},reply:{submitted:0,recorded:5}}}]};
+  const d={...data,plans:[p],posts:[],summary:{day:"2026-10-14"}};
+  assert.equal(planProgress(p,"2026-10-14").reply.completed,5);
+  assert.equal(planProgress(p,"2026-10-14").reply.submitted,0);
+  assert.equal(planProgress(p,"2026-10-15").reply.completed,0);
+  const html=workspace(d,{tab:"plans",selected:new Set()});
+  assert.ok(html.includes('帖子 <b>1/1</b>') && html.includes('评论 <b>5/5</b>'));
+  assert.ok(html.includes('含网页登记 1 帖 / 5 评') && html.includes('每天 01:00'));
+  const detail=drawer(d,{drawer:{type:"plan",id:"p"},drawerTab:"summary"});
+  assert.ok(detail.includes('com-plan-sync-receipts') && detail.includes('具体结果查看内容回执'));
+});
 test("article-only goals and historical goals stay separate", () => {
   const p={...plan,payload:{...plan.payload,replies_per_day:0}};
   assert.equal(planProgress(p,"2026-10-06").replyGoal,0);

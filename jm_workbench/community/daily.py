@@ -63,8 +63,9 @@ class DailyPlans:
                 checks=self.store.rows('SELECT next_check,attempts,reply_goal FROM community_plan_checks WHERE plan_id=? AND day=?',(p['id'],d['day']))
                 d.update(checks[0] if checks else {'next_check':0,'attempts':0,'reply_goal':5})
                 jobs=self.store.rows('''SELECT i.kind,j.state FROM community_plan_items i JOIN community_jobs j ON j.post_id=i.post_id
-                    WHERE i.plan_id=? AND i.day=?''',(p['id'],d['day']))
+                    WHERE i.plan_id=? AND i.day=? AND j.account_id=?''',(p['id'],d['day'],p['payload']['account_id']))
                 d['counts']={k:{'planned':sum(j['kind']==k for j in jobs),'submitted':sum(j['kind']==k and j['state']=='submitted' for j in jobs),
+                   'recorded':sum(j['kind']==k and j['state']=='recorded' for j in jobs),
                    'waiting':sum(j['kind']==k and j['state'] in ('queued','paused') for j in jobs),'failed':sum(j['kind']==k and j['state'] in ('failed','unknown') for j in jobs)} for k in ('thread','reply')}
             p['platform']=self.s.account(p['payload']['account_id'])['platform'];p['days']=days
             p['preparations']=self.s.materials.state(p['id']) if hasattr(self.s,'materials') else []
@@ -135,6 +136,7 @@ class DailyPlans:
         return {'id':ident,'message':f"每日计划已保存；每天1篇帖子、评论{data['replies_per_day']}个不同帖子；缺口会定时重查"}
 
     def control(self,ident,action):
+        if action=='sync-receipts':return self.sync_receipts(ident)
         if action=='prepare-materials':
             return self.s.materials.request(ident)
         with self.lock:
@@ -154,6 +156,29 @@ class DailyPlans:
                 return {'message':'每日计划已暂停，尚未提交的动作已停止'}
             if action=='today':return self.prepare(ident,force=True)
             raise ValueError('未知每日计划操作')
+
+    def sync_receipts(self,ident):
+        """Attribute today's existing successful records; never invent a receipt."""
+        from .service import SHANGHAI
+        with self.lock,self.store.connect(True) as db:
+            p=self.get(ident);a=self.s.account(p['payload']['account_id']);now=self.s.clock()
+            local=datetime.fromtimestamp(now,SHANGHAI);day=local.date().isoformat()
+            midnight=local.replace(hour=0,minute=0,second=0,microsecond=0).timestamp()
+            rows=list(db.execute("""SELECT j.post_id,j.snapshot,j.receipt FROM community_jobs j
+                WHERE j.account_id=? AND j.identity=? AND j.platform=?
+                  AND ((j.state='submitted' AND j.started>=? AND j.started<?)
+                   OR (j.state='recorded' AND j.updated>=? AND j.updated<?))""",
+                (a['id'],a['identity'],a['platform'],midnight,midnight+86400,midnight,midnight+86400)))
+            linked=0
+            for row in rows:
+                receipt=json.loads(row['receipt'])
+                if not receipt.get('url'):continue
+                payload=json.loads(row['snapshot'])['payload'];kind=payload.get('kind','thread')
+                if kind not in ('thread','reply'):continue
+                linked+=db.execute('INSERT OR IGNORE INTO community_plan_items VALUES(?,?,?,?,?)',(ident,day,kind,material_id(payload['body']),row['post_id'])).rowcount
+            if linked:
+                db.execute("INSERT INTO community_plan_days VALUES(?,?,'planned','已关联当天实际发布记录；按原回执区分已提交和网页登记',?,?) ON CONFLICT(plan_id,day) DO UPDATE SET message=excluded.message,updated=excluded.updated",(ident,day,now,now))
+            return {'message':f'已将 {linked} 条当天真实回执关联到计划；没有新建或重复发布内容','linked':linked}
 
     def tick(self):
         from .service import SHANGHAI
@@ -191,6 +216,7 @@ class DailyPlans:
             if d.get('start_date') and day<d['start_date']:
                 return {'message':'等待计划开始日期 '+d['start_date']}
             if not force and now<due:return {'message':'等待每日执行时间'}
+            self.sync_receipts(ident)
             checks=self.store.rows('SELECT * FROM community_plan_checks WHERE plan_id=? AND day=?',(ident,day))
             if checks and not force and (not checks[0]['next_check'] or now<checks[0]['next_check']):
                 return {'message':'等待下次检查；已有任务保持原记录'}
