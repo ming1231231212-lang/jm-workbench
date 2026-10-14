@@ -38,5 +38,7 @@
 
 ## 官方参考
 
+后续本机评论执行组件及其独立于自动调度的边界，见 [日常 Chrome 本机执行组件](native-community-execution.md)。组件存在不代表每日自动发布已启用。
+
 - [知乎科技创作者指南](https://event.zhihu.com/tech-creator-guide/)：文章、回答及创作入口。
 - [知乎 AI 辅助创作治理公告](https://zhuanlan.zhihu.com/p/624717941)：事实核查与原生创作声明。
