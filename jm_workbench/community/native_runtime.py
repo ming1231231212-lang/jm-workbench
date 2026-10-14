@@ -63,8 +63,10 @@ class NativeRuntime:
         if account['platform'] not in ('tieba','juejin','zhihu'):raise PreflightStopped('此平台未接入本机自动发布')
         if not account.get('native_binding'):raise PreflightStopped('请先核验此账号的本人主页')
         root=self.config.home/'native-tabs'
+        identity=self.channel(root/(account['id']+'-identity.json'))
+        identity.readonly_replacement=True
         return NativePublisher(self.channel(root/(account['id']+'-publish.json')),
-            identity_ui=self.channel(root/(account['id']+'-identity.json')),
+            identity_ui=identity,
             before_submit=lambda:reserve_submit(self.config,account,payload,target))
     def check(self,account):
         with desktop_lock(self.config.home):
@@ -74,3 +76,11 @@ class NativeRuntime:
         with desktop_lock(self.config.home):
             try:return self.publisher(account,payload,target).publish(account,account['native_binding'],payload,target)
             except NativeStopped as ex:raise PreflightStopped(str(ex)) from None
+    def discover(self,account,terms):
+        from .native_discovery import NativeDiscovery
+        if account['platform'] not in ('tieba','juejin','zhihu'):raise PreflightStopped('此平台尚未接入本机原帖发现')
+        with desktop_lock(self.config.home):
+            try:
+                channel=self.channel(self.config.home/'native-tabs'/(account['id']+'-discover.json'))
+                return NativeDiscovery(channel).discover(account,terms)
+            except NativeStopped as ex:raise RetryablePreflight('相关原帖读取暂未完成，稍后重查；未提交内容') from ex

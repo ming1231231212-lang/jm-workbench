@@ -55,6 +55,8 @@ class Community:
         self.daily=DailyPlans(self)
         from .backfill import Backfill
         self.backfill=Backfill(self)
+        from .materials import AutoMaterials
+        self.materials=AutoMaterials(self)
 
     def account(self,ident,private=False):
         rows=self.store.rows('SELECT * FROM community_accounts WHERE id=?',(ident,))
@@ -281,8 +283,10 @@ class Community:
             FROM community_jobs WHERE (state='submitted' AND started>=? AND started<?)
               OR (state='recorded' AND updated>=? AND updated<?) GROUP BY platform,kind,state''',
             (midnight,midnight+86400,midnight,midnight+86400))
-        summary={'day':local.date().isoformat(),'thread_submitted':0,'reply_submitted':0,'recorded':0,'platforms':{}}
+        summary={'day':local.date().isoformat(),'thread_submitted':0,'reply_submitted':0,'recorded':0,'platforms':{},'platform_results':{}}
         for row in totals:
+            item=summary['platform_results'].setdefault(row['platform'],{'thread_submitted':0,'reply_submitted':0,'thread_recorded':0,'reply_recorded':0})
+            item[row['kind']+'_'+row['state']]+=row['n']
             key='recorded' if row['state']=='recorded' else row['kind']+'_submitted'
             if key in summary:summary[key]+=row['n']
             if row['state']=='submitted':
@@ -434,6 +438,7 @@ class Community:
     def _tick(self):
         now=self.clock()
         if self.cfg.code_revision!=revision():return
+        self.materials.tick()
         self.daily.tick()
         with self.store.connect(True) as db:
             job=db.execute("SELECT * FROM community_jobs WHERE state='queued' AND due<=? ORDER BY due,created,rowid LIMIT 1",(now,)).fetchone()

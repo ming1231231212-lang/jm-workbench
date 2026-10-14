@@ -116,3 +116,25 @@ def test_creating_tab_keeps_verified_window_binding(tmp_path):
     ui.call('open',url='https://www.zhihu.com/people/fixture')
     assert ui.state['window']==134346 and ui.state['process_started']=='original'
     assert ui.state['key']=='owned'
+
+def test_readonly_identity_replaces_repurposed_tab_in_same_window(tmp_path):
+    ui=Channel(tmp_path/'tab.json','https://user.example/')
+    ui.state={'key':'old','url':'https://www.zhihu.com/people/fixture','window':1,'process_id':2,'process_started':'original'}
+    ui.readonly_replacement=True
+    ui.call('open',url='https://www.zhihu.com/people/fixture')
+    assert ui.state['key']=='owned' and ui.state['window']==1
+    assert sum(a=='new' for a,_ in ui.actions)==1
+    assert not any(a=='close' for a,_ in ui.actions)
+
+def test_closed_unsent_draft_restores_from_job_without_touching_other_tabs(tmp_path):
+    class Closed(Channel):
+        def raw(self,action,**kw):
+            if action=='select' and kw.get('key')=='closed':raise NativeStopped('标签关闭')
+            return super().raw(action,**kw)
+    ui=Closed(tmp_path/'tab.json','https://user.example/')
+    payload={'title':'未发布标题','body':'尚未提交正文'}
+    ui.state={'key':'closed','url':'https://zhuanlan.zhihu.com/write','window':1,'process_id':2,'process_started':'original','draft':ui.fingerprint(payload)}
+    assert ui.resume_article(payload) is None
+    ui.call('open',url='https://zhuanlan.zhihu.com/write')
+    assert ui.state['key']=='owned' and ui.state['window']==1
+    assert not any(a in ('click','close') for a,_ in ui.actions)

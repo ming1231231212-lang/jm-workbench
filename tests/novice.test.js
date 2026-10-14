@@ -28,6 +28,15 @@ test('stopped worker never claims automatic execution is ready',()=>{
   const html=overview({executor:{status:'stopped',message:'后台未启动'},posts:[],plans:[]});
   assert.ok(html.includes('后台未启动')&&html.includes('网页能打开不代表'));
 });
+
+test('today distinguishes web registrations from receipts and automatic supply from manual shortage',()=>{
+  const html=overview({summary:{day:'2026-10-14',platform_results:{zhihu:{thread_recorded:1,reply_recorded:5}}},
+    accounts:[{id:'a',enabled:true,identity:'owner',checked:1}],platforms:[{id:'zhihu',name:'知乎',automatic:true}],risk:[],posts:[],
+    plans:[{id:'p',platform:'zhihu',state:'enabled',remaining_topics:0,payload:{name:'每日安排',account_id:'a',auto_prepare:true},preparations:[{message:'等待相关原帖'}]}]});
+  assert.ok(html.includes('网页结果已登记：帖子 1 篇 · 评论 5 条'));
+  assert.ok(html.includes('自动准备已开启')&&!html.includes('需要补充帖子'));
+  assert.ok(html.includes('今日帖子 <b>1</b>')&&html.includes('已接收 / 网页已登记')); // The subtype remains explicit.
+});
 test('read and write timeouts explain uncertainty differently without retries',async()=>{
   let calls=0;
   const hanging=async (path,opts)=>{calls++;return new Promise((resolve,reject)=>opts.signal.addEventListener('abort',()=>reject(Error('aborted'))));};

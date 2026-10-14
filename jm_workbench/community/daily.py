@@ -67,6 +67,9 @@ class DailyPlans:
                 d['counts']={k:{'planned':sum(j['kind']==k for j in jobs),'submitted':sum(j['kind']==k and j['state']=='submitted' for j in jobs),
                    'waiting':sum(j['kind']==k and j['state'] in ('queued','paused') for j in jobs),'failed':sum(j['kind']==k and j['state'] in ('failed','unknown') for j in jobs)} for k in ('thread','reply')}
             p['platform']=self.s.account(p['payload']['account_id'])['platform'];p['days']=days
+            p['preparations']=self.s.materials.state(p['id']) if hasattr(self.s,'materials') else []
+            for batch in p['preparations']:
+                pool=self.s.materials.pool(p,batch['day']);batch['materials']=pool
             from .service import SHANGHAI
             now=self.s.clock();local=datetime.fromtimestamp(now,SHANGHAI);today=local.date().isoformat()
             current=next((d for d in days if d['day']==today),None)
@@ -82,6 +85,10 @@ class DailyPlans:
                 if current:start+=timedelta(days=1)
                 if p['payload'].get('start_date'):
                     start=max(start,datetime.fromisoformat(p['payload']['start_date']).replace(tzinfo=SHANGHAI,hour=p['payload']['hour'],minute=p['payload']['minute']))
+                if p['payload'].get('auto_prepare'):
+                    prepared=next((b for b in p['preparations'] if b['day']==start.date().isoformat()),None)
+                    if not prepared:times.append((max(now,(start-timedelta(hours=1)).timestamp()),'自动准备文章和相关原帖评论'))
+                    elif prepared['state']!='ready':times.append((max(now,prepared['next_check'] or (start-timedelta(hours=1)).timestamp()),'继续准备内容并核对素材缺口'))
                 times.append((max(now,start.timestamp()),'安排每日任务'))
                 p['next_action_at'],p['next_action']=min(times,key=lambda t:t[0])
                 p['next_send_at']=max(now,queued[0]['due']) if queued else 0
@@ -92,6 +99,7 @@ class DailyPlans:
         data=payload.model_dump(mode='json');now=self.s.clock()
         a=self.s.account(data['account_id'])
         if a['platform'] not in ('tieba','juejin','csdn','zhihu'):raise ValueError('此平台尚未接入每日评论计划')
+        if data.get('auto_prepare') and (a['platform'] not in ('tieba','juejin','zhihu') or self.s.cfg.config.values.get('community_browser_execution')!='native'):raise ValueError('自动准备支持已核验本机模式的贴吧、掘金和知乎')
         if a['platform']=='zhihu' and not a.get('automatic_execution'):raise ValueError('请先完成知乎本机发布配置和账号核验')
         destination(a['platform'],data['board'])
         for r in data['replies']:thread_url(a['platform'],r['url'])
@@ -127,6 +135,8 @@ class DailyPlans:
         return {'id':ident,'message':f"每日计划已保存；每天1篇帖子、评论{data['replies_per_day']}个不同帖子；缺口会定时重查"}
 
     def control(self,ident,action):
+        if action=='prepare-materials':
+            return self.s.materials.request(ident)
         with self.lock:
             p=self.get(ident);now=self.s.clock()
             if action=='enable':
@@ -162,6 +172,7 @@ class DailyPlans:
             self.prepare(p['id'])
 
     def recover(self):
+        if hasattr(self.s,'materials'):self.s.materials.recover()
         with self.store.connect(True) as db:
             for r in list(db.execute("SELECT plan_id FROM community_plan_days WHERE state='preparing'")):
                 db.execute("UPDATE community_plan_checks SET next_check=? WHERE plan_id=?",(self.s.clock(),r['plan_id']))
@@ -218,7 +229,8 @@ class DailyPlans:
                 reply_goal=d.get('replies_per_day',5)
                 # A changed setting affects only missing work; existing snapshots remain fixed.
                 with self.store.connect(True) as db:db.execute('UPDATE community_plan_checks SET reply_goal=? WHERE plan_id=? AND day=?',(reply_goal,ident,day))
-                topics=[t for t in d['topics'] if material_id(t['body']) not in used]
+                available=self.s.materials.available(p,day) if d.get('auto_prepare') else {'thread':d['topics'],'reply':d['replies']}
+                topics=[t for t in available['thread'] if material_id(t['body']) not in used]
                 midnight=local.replace(hour=0,minute=0,second=0,microsecond=0).timestamp()
                 today=self.store.rows("SELECT snapshot FROM community_jobs WHERE platform=? AND (started>=? OR (state='recorded' AND updated>=?))",(a['platform'],midnight,midnight))
                 thread_used=any(json.loads(r['snapshot'])['payload'].get('kind','thread')=='thread' for r in today)
@@ -244,11 +256,13 @@ class DailyPlans:
                 if topics and not thread_used and not created['thread']:enqueue('thread',topics[0],d['board'])
                 needed=max(0,reply_goal-created['reply'])
                 replies=[]
-                for r in d['replies']:
+                from .registry import reply_target_key
+                for r in available['reply']:
                     if len(replies)>=needed:break
                     key=material_id(r['body'])
-                    if key in used or r['url'] in targets:continue
-                    replies.append(r);used.add(key);targets.add(r['url'])
+                    target_key=reply_target_key(a['platform'],r['url'])
+                    if key in used or target_key in targets:continue
+                    replies.append(r);used.add(key);targets.add(target_key)
                 discover_note=''
                 rules=[r for r in d['reply_rules'] if material_id(r['body']) not in used]
                 if len(replies)<needed and rules and d['source_boards']:

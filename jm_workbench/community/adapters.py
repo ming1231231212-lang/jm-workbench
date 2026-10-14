@@ -291,7 +291,8 @@ class CommunityAdapter:
     def discover(self,account,boards):
         """Read a bounded set of recent public threads; never click interaction buttons."""
         if self.config.values.get('community_browser_execution')=='native':
-            raise PreflightStopped('本机发布请先补充已核对原文的指定帖评论；不会退回旧浏览器连接')
+            from .native_runtime import NativeRuntime
+            return NativeRuntime(self.config).discover(account,boards)
         self.require_browser_execution(account)
         if account['platform']=='csdn':
             from .csdn import CsdnBrowser

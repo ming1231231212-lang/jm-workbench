@@ -156,10 +156,19 @@ class DailyPlan(BaseModel):
     hour: int = Field(default=10,ge=0,le=20)
     minute: int = Field(default=0,ge=0,le=59)
     replies_per_day: int = Field(default=5,ge=0,le=5)
+    auto_prepare: bool = False
+    search_terms: list[str] = Field(default_factory=lambda:['AI工具','AI工作流','AI编程'],min_length=1,max_length=6)
     topics: list[DailyTopic] = Field(default_factory=list,max_length=60)
     replies: list[ReplyMaterial] = Field(default_factory=list,max_length=100)
     reply_rules: list[ReplyRule] = Field(default_factory=list,max_length=60)
     source_boards: list[str] = Field(default_factory=list,max_length=3)
+
+    @field_validator('search_terms')
+    @classmethod
+    def valid_search_terms(cls,values):
+        import re
+        if any(not 2<=len(v.strip())<=30 or re.search(r'https?://|[<>\r\n]',v) for v in values):raise ValueError('搜索方向需2–30字，不含链接或换行')
+        return list(dict.fromkeys(v.strip() for v in values))
 
     @field_validator('board')
     @classmethod

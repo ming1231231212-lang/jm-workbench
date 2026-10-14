@@ -60,7 +60,9 @@ function Guard {
 $walker=[System.Windows.Automation.TreeWalker]::ControlViewWalker
 if($q.tab_key){
  $items=$w.FindAll($scope,[System.Windows.Automation.PropertyCondition]::new([System.Windows.Automation.AutomationElement]::ControlTypeProperty,[System.Windows.Automation.ControlType]::TabItem))
- $owned=@($items|Where-Object {($_.GetRuntimeId() -join ',') -eq $q.tab_key})
+ # Chromium UIA can expose the same RuntimeId repeatedly in FindAll.
+ # A RuntimeId identifies one element; repeated references are not new tabs.
+ $owned=@($items|Where-Object {($_.GetRuntimeId() -join ',') -eq $q.tab_key}|Select-Object -First 1)
  if($owned.Count -ne 1){throw '本任务原始标签已关闭，未接管其他页面'}
  $owned[0].GetCurrentPattern([System.Windows.Automation.SelectionItemPattern]::Pattern).Select()
 }
@@ -128,6 +130,12 @@ if($q.action -eq 'snapshot'){
  Result @{url=$url;title=$d.Current.Name;text=$text;nodes=@($script:nodes.ToArray())};exit
 }
 if($q.action -eq 'keys'){Guard;if($q.text -eq '^{HOME}'){$d.SetFocus();Guard};[System.Windows.Forms.SendKeys]::SendWait($q.text);@{key_sent=$true}|ConvertTo-Json -Compress;exit}
+if($q.action -eq 'read-more'){
+ Guard;$uri=[uri](CurrentUrl)
+ if(!(($uri.Host -eq 'tieba.baidu.com' -and $uri.AbsolutePath -eq '/f') -or ($uri.Host -eq 'juejin.cn' -and $uri.AbsolutePath -eq '/ai') -or ($uri.Host -eq 'www.zhihu.com' -and $uri.AbsolutePath -eq '/search'))){throw '只允许滚动已核对的公共列表'}
+ $d.SetFocus();Guard
+ [System.Windows.Forms.SendKeys]::SendWait('{PGDN}');Result @{scrolled=$true};exit
+}
 if($q.action -eq 'find'){
  Guard
  if(!$q.text -or $q.text.Length -gt 100){throw '查找文字无效，未操作'}

@@ -61,6 +61,8 @@ def main():
             page.locator('#com-v2-wizard button[value="next"]').click()
             page.locator('[name="start_date"]').fill('2026-10-15')
             page.locator('[name="start_time"]').fill('10:00')
+            page.locator('[name="auto_prepare"]').select_option('true')
+            page.locator('[name="search_terms"]').fill('AI，工作流')
             page.locator('#com-v2-wizard button[value="save"]').click()
             expect(page.locator('#dialog')).not_to_be_visible()
             plan=s.daily.state()[0]
@@ -72,6 +74,14 @@ def main():
             assert not s.state()['posts'] and not fake.sent
             expect(page.locator('#community-drawer')).to_contain_text('2026/10/15 10:00:00')
             checks.append('enable and arrange-today cannot send before start date')
+            assert plan['payload']['auto_prepare'] and plan['payload']['search_terms']==['AI','工作流']
+            expect(page.locator('#community-drawer')).to_contain_text('每日自动准备')
+            with page.expect_response(lambda r: r.url.endswith('/prepare-materials')) as response:
+                page.locator('[data-action="com-plan-prepare-materials"]').click()
+            assert response.value.status==200, response.value.text()
+            assert s.materials.state(plan['id'])[0]['state']=='requested'
+            assert not s.state()['posts'] and not fake.sent
+            checks.append('automatic supply settings persist and check button only requests preparation')
             assert not external and not errors
             checks.append('no external requests browser exceptions or publications')
             result={'passed':len(checks),'checks':checks,'external':external,'errors':errors,'fake_submissions':len(fake.sent)}

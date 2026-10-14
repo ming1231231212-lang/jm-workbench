@@ -18,6 +18,8 @@ class NativeChromeChannel:
         self.runner = runner
         self.expected = ''
         self.redirects = []
+        self.readonly_replacement = False
+        self.replaced = False
         self.state = json.loads(self.path.read_text(encoding='utf-8')) if self.path.exists() else {}
         self.expected=self.state.get('url','')
         self.shell = shutil.which('pwsh') or shutil.which('powershell')
@@ -65,9 +67,28 @@ class NativeChromeChannel:
 
     def resume_article(self,payload):
         if self.state.get('draft')!=self.fingerprint(payload):return None
-        self.raw('select',key=self.state['key'])
+        try:self.raw('select',key=self.state['key'])
+        except NativeStopped:
+            if self.replace_missing():return None
+            raise
         self.expected=self.state['url']
         return self.call('follow_editor')
+
+    def replace_missing(self):
+        """A closed draft tab is recreated from the durable job, never resubmitted.
+
+        Caller only reaches this before the reservation/submit boundary. Existing
+        tabs, even repurposed ones, must not be overwritten or closed.
+        """
+        tabs=self.raw('tabs')['tabs']
+        if any(t['key']==self.state.get('key') for t in tabs):return False
+        self.release_tab();return True
+
+    def release_tab(self):
+        if self.replaced or not all(self.state.get(k) for k in ('window','process_id','process_started')):
+            raise NativeStopped('本次无法安全恢复原窗口任务标签')
+        self.state={k:self.state[k] for k in ('window','process_id','process_started')}
+        self.expected='';self.replaced=True;self.save()
 
     def adopt(self, title_prefix, expected_url):
         """Only for the already-created task tab; requires an explicit exact URL."""
@@ -114,7 +135,7 @@ class NativeChromeChannel:
             u = urlsplit(value)
             if u.scheme != 'https' or u.hostname != 'www.zhihu.com' or not u.path.startswith('/people/') or u.query or u.fragment or u.username or u.port:
                 raise NativeStopped('主页跳转不在已绑定的账号范围')
-        if not self.state:
+        if not self.state.get('key'):
             self.raw('new')
             tabs = [t for t in self.raw('tabs')['tabs'] if t.get('selected')]
             if len(tabs) != 1: raise NativeStopped('新建任务标签无法唯一核对，未导航')
@@ -122,11 +143,17 @@ class NativeChromeChannel:
             self.state.update(key=tabs[0]['key'], url=self.raw('url')['url'])
             self.state.pop('new', None)
             self.save()
-        self.raw('select', key=self.state['key'])
+        try:self.raw('select', key=self.state['key'])
+        except NativeStopped:
+            if self.replace_missing():return self.call('open',**kwargs)
+            raise
         actual = self.raw('url')['url']
         if actual != self.state['url']:
             self.expected=self.state['url']
-            self.call('follow_editor')
+            try:self.call('follow_editor')
+            except NativeStopped:
+                if not self.readonly_replacement:raise
+                self.release_tab();return self.call('open',**kwargs)
             actual=self.state['url']
         if self.state.get('draft') and url!=actual:
             raise NativeStopped('本任务有未提交文章，已保留原稿，未导航')

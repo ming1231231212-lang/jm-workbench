@@ -88,7 +88,7 @@ class BoundedCommunityAdapter:
         self.local = CommunityAdapter(config)
         self.boundary = boundary or ProcessBoundary(config.home)
         self.operation_lock=threading.Lock()
-        self.limits={**LIMITS,**({'check':120,'publish':420} if config.values.get('community_browser_execution')=='native' else {})}
+        self.limits={**LIMITS,**({'check':120,'discover':360,'publish':420} if config.values.get('community_browser_execution')=='native' else {})}
 
     def _call(self, action, *args):
         if not self.operation_lock.acquire(blocking=False):
