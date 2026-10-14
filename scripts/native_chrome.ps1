@@ -6,6 +6,7 @@ $q=[Console]::In.ReadToEnd() | ConvertFrom-Json
 Add-Type -AssemblyName UIAutomationClient
 Add-Type -AssemblyName UIAutomationTypes
 Add-Type -AssemblyName System.Windows.Forms
+Add-Type 'using System.Runtime.InteropServices; public static class JmClipboard { [DllImport("user32.dll")] public static extern uint GetClipboardSequenceNumber(); }'
 Add-Type 'using System; using System.Runtime.InteropServices; public static class JmNativeChrome { [DllImport("user32.dll")] public static extern bool SetForegroundWindow(IntPtr h); [DllImport("user32.dll")] public static extern IntPtr GetForegroundWindow(); [DllImport("user32.dll")] public static extern bool SetCursorPos(int x,int y); [DllImport("user32.dll")] public static extern void mouse_event(uint f,uint x,uint y,uint d,UIntPtr e); [DllImport("user32.dll")] public static extern IntPtr WindowFromPoint(Point p); [DllImport("user32.dll")] public static extern IntPtr GetAncestor(IntPtr h,uint f); [DllImport("user32.dll")] public static extern uint GetWindowThreadProcessId(IntPtr h,out uint p); [DllImport("kernel32.dll")] public static extern uint GetCurrentThreadId(); [DllImport("user32.dll")] public static extern bool AttachThreadInput(uint a,uint b,bool attach); [DllImport("user32.dll")] public static extern bool BringWindowToTop(IntPtr h); [DllImport("user32.dll")] public static extern bool IsIconic(IntPtr h); [DllImport("user32.dll")] public static extern bool ShowWindow(IntPtr h,int command); [StructLayout(LayoutKind.Sequential)] public struct Point { public int x; public int y; } public static bool Activate(IntPtr h) { if(IsIconic(h)) ShowWindow(h,9); if(GetForegroundWindow()==h) return true; if(SetForegroundWindow(h) && GetForegroundWindow()==h) return true; var f=GetForegroundWindow(); if(f==IntPtr.Zero) return false; uint p; uint foreground=GetWindowThreadProcessId(f,out p), current=GetCurrentThreadId(); bool joined=foreground!=current && AttachThreadInput(current,foreground,true); try { BringWindowToTop(h); SetForegroundWindow(h); return GetForegroundWindow()==h; } finally { if(joined) AttachThreadInput(current,foreground,false); } } }'
 if(!$Window){
  $processes=@(Get-Process chrome -ErrorAction SilentlyContinue | Where-Object {$_.MainWindowHandle -ne 0} | Where-Object {
@@ -197,15 +198,24 @@ if($q.action -in @('focus-copy','focus-paste','focus-clear')){
   [System.Windows.Forms.Clipboard]::SetText($q.text);Guard
   [System.Windows.Forms.SendKeys]::SendWait('^a');[System.Windows.Forms.SendKeys]::SendWait('^v')
  }
- Guard;[System.Windows.Forms.Clipboard]::Clear();[System.Windows.Forms.SendKeys]::SendWait('^a');[System.Windows.Forms.SendKeys]::SendWait('^c')
- # SendWait waits for key delivery, not Chrome's asynchronous clipboard write.
- # A genuinely empty editor remains empty after this bounded read-only wait.
- for($copyWait=0;$copyWait -lt 40;$copyWait++){
-  if([System.Windows.Forms.Clipboard]::ContainsText()){break}
+ # Never clear a pending paste's source. A new clipboard sequence proves that
+ # this copy completed; stale clipboard text is not evidence of editor content.
+ Guard;$copySequence=[JmClipboard]::GetClipboardSequenceNumber()
+ [System.Windows.Forms.SendKeys]::SendWait('^a');[System.Windows.Forms.SendKeys]::SendWait('^c')
+ $freshCopy=$false
+ for($copyWait=0;$copyWait -lt 60;$copyWait++){
+  if([JmClipboard]::GetClipboardSequenceNumber() -ne $copySequence -and [System.Windows.Forms.Clipboard]::ContainsText()){$freshCopy=$true;break}
   Start-Sleep -Milliseconds 25
  }
  Start-Sleep -Milliseconds 50
- $copied=[System.Windows.Forms.Clipboard]::GetText()
+ $copied='';$html=''
+ if($freshCopy){
+  $copied=[System.Windows.Forms.Clipboard]::GetText()
+  $html=[System.Windows.Forms.Clipboard]::GetText([System.Windows.Forms.TextDataFormat]::Html)
+ }else{
+  $editorText=$e.GetCurrentPattern([System.Windows.Automation.TextPattern]::Pattern).DocumentRange.GetText(-1)
+  if(![string]::IsNullOrWhiteSpace($editorText)){throw '原生复制尚未完成，保留现有正文，未提交'}
+ }
  if($q.action -eq 'focus-clear'){
   if($copied -cne $q.text){throw '临时输入内容改变，已保留，未清空'}
   Guard
@@ -213,7 +223,6 @@ if($q.action -in @('focus-copy','focus-paste','focus-clear')){
   [System.Windows.Forms.SendKeys]::SendWait('{BACKSPACE}')
   @{cleared=$true}|ConvertTo-Json -Compress;exit
  }
- $html=[System.Windows.Forms.Clipboard]::GetText([System.Windows.Forms.TextDataFormat]::Html)
  @{value=$copied;html=$html;action=$q.action}|ConvertTo-Json -Compress;exit
 }
 if(!$e -or $e.Current.IsOffscreen -or !$e.Current.IsEnabled){throw '目标控件消失、不可见或不可用，未操作'}
