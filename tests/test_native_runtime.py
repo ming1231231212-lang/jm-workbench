@@ -69,3 +69,19 @@ def test_unbound_native_zhihu_cannot_enable_a_daily_plan(ctx):
     a=s.save_account(CommunityAccount(name='fixture',platform='zhihu'))
     assert a['automatic_execution'] is False
     with pytest.raises(ValueError,match='核验'):s.daily.save(DailyPlan(name='fixture plan',account_id=a['id'],rules_note='only fixture materials and authorized sample posts',start_date='2026-10-15'))
+
+
+def test_only_pre_submit_overlay_can_retry_after_wait(ctx,monkeypatch):
+    from contextlib import nullcontext
+    from jm_workbench.community.native_runtime import NativeRuntime
+    from jm_workbench.community.native import NativeStopped
+    s,_,a,_=ctx;runtime=NativeRuntime(s.cfg.config)
+    monkeypatch.setattr('jm_workbench.community.native_runtime.desktop_lock',lambda _:nullcontext())
+    class Publisher:
+        error=NativeStopped('其他窗口遮挡目标控件，未点击')
+        def publish(self,*_):raise self.error
+    publisher=Publisher();monkeypatch.setattr(runtime,'publisher',lambda *_:publisher)
+    account={**s.account(a),'native_binding':{}}
+    with pytest.raises(RetryablePreflight):runtime.publish(account,{},'')
+    publisher.error=NativeUnknown('文章已进入单次提交边界，结果不明')
+    with pytest.raises(NativeUnknown):runtime.publish(account,{},'')

@@ -181,9 +181,9 @@ class Backfill:
                 'submitted':sum(r['status']=='submitted' for r in items),
                 'with_content':sum(bool(r['post_id']) for r in items)}
 
-    def queue(self, plan_id):
+    def queue(self, plan_id, *, today_only=False):
         """Explicitly continue only proven-unsent history under the current revision."""
-        from .service import revision
+        from .service import revision,SHANGHAI
         with self.s.step_lock:
             p=self.s.daily.get(plan_id)
             if p['state']!='enabled':raise ValueError('请先核验并启用原每日计划，再安排历史补发')
@@ -200,7 +200,11 @@ class Backfill:
                     raise ValueError('计划或账号配置已改变，请重新核验')
                 if db.execute('SELECT 1 FROM community_risk WHERE platform=?',(a['platform'],)).fetchone():
                     raise ValueError('平台仍有限制或结果不明，不能安排补发')
-                rows=db.execute("SELECT * FROM community_backfill WHERE plan_id=? AND post_id!='' ORDER BY CASE kind WHEN 'thread' THEN 0 ELSE 1 END,day,slot",(plan_id,)).fetchall()
+                if today_only:
+                    day=datetime.fromtimestamp(self.s.clock(),SHANGHAI).date().isoformat()
+                    rows=db.execute("SELECT i.*,i.post_id AS id FROM community_plan_items i WHERE plan_id=? AND day=? ORDER BY CASE kind WHEN 'thread' THEN 0 ELSE 1 END",(plan_id,day)).fetchall()
+                else:
+                    rows=db.execute("SELECT * FROM community_backfill WHERE plan_id=? AND post_id!='' ORDER BY CASE kind WHEN 'thread' THEN 0 ELSE 1 END,day,slot",(plan_id,)).fetchall()
                 for r in rows:
                     db.execute('SAVEPOINT backfill_queue')
                     try:
@@ -239,5 +243,5 @@ class Backfill:
                         db.execute('UPDATE community_backfill SET message=? WHERE id=?',(str(ex),r['id']))
                         skipped+=1
                     finally:db.execute('RELEASE backfill_queue')
-            return {'message':f'已安排{queued}项历史补发，{skipped}项需继续核实；实际结果以平台回执为准',
+            return {'message':f'已安排{queued}项'+('今日未提交任务' if today_only else '历史补发')+f'，{skipped}项需继续核实；实际结果以平台回执为准',
                     'queued':queued,'skipped':skipped,'backfill':self.state()}

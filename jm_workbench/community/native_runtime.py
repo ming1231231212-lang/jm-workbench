@@ -75,7 +75,10 @@ class NativeRuntime:
     def publish(self,account,payload,target):
         with desktop_lock(self.config.home):
             try:return self.publisher(account,payload,target).publish(account,account['native_binding'],payload,target)
-            except NativeStopped as ex:raise PreflightStopped(str(ex)) from None
+            except NativeStopped as ex:
+                if '其他窗口遮挡目标控件' in str(ex):
+                    raise RetryablePreflight('窗口暂时遮挡发布控件，本次未提交；稍后重查') from None
+                raise PreflightStopped(str(ex)) from None
     def discover(self,account,terms):
         from .native_discovery import NativeDiscovery
         if account['platform'] not in ('tieba','juejin','zhihu'):raise PreflightStopped('此平台尚未接入本机原帖发现')

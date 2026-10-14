@@ -211,9 +211,15 @@ if($q.action -in @('focus-copy','focus-paste','focus-clear')){
 }
 if(!$e -or $e.Current.IsOffscreen -or !$e.Current.IsEnabled){throw '目标控件消失、不可见或不可用，未操作'}
 $r=$e.Current.BoundingRectangle
-$x=[int]($r.Left+$r.Width/2);$y=[int]($r.Top+$r.Height/2)
-[void][JmNativeChrome]::SetCursorPos($x,$y);Guard
-$point=[JmNativeChrome+Point]::new();$point.x=$x;$point.y=$y
+$point=$null
+# A floating meeting window can cover the centre while the same control has
+# another visible point. Never click the overlay or operate its controls.
+foreach($fraction in @(@(.5,.5),@(.25,.5),@(.75,.5),@(.5,.25),@(.5,.75))){
+ $candidate=[JmNativeChrome+Point]::new();$candidate.x=[int]($r.Left+$r.Width*$fraction[0]);$candidate.y=[int]($r.Top+$r.Height*$fraction[1])
+ if([JmNativeChrome]::GetAncestor([JmNativeChrome]::WindowFromPoint($candidate),2) -eq $h){$point=$candidate;break}
+}
+if(!$point){throw '其他窗口遮挡目标控件，未点击'}
+[void][JmNativeChrome]::SetCursorPos($point.x,$point.y);Guard
 if([JmNativeChrome]::GetAncestor([JmNativeChrome]::WindowFromPoint($point),2) -ne $h){throw '其他窗口遮挡目标控件，未点击'}
 [JmNativeChrome]::mouse_event(2,0,0,0,[UIntPtr]::Zero);[JmNativeChrome]::mouse_event(4,0,0,0,[UIntPtr]::Zero)
 if($q.action -eq 'paste'){

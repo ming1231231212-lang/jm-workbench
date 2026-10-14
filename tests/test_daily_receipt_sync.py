@@ -65,6 +65,20 @@ def test_midnight_prepares_only_and_one_am_schedules(supply):
     assert len(s.state()['posts'])==6 and not f.sent
 
 
+def test_earlier_web_account_records_link_without_upgrading_identity_evidence(ctx):
+    s,f,a,n=ctx
+    post=existing_receipt(s,a,n,30,identity='manual:'+a)
+    with s.store.connect(True) as db:
+        snap=json.loads(db.execute('SELECT snapshot FROM community_jobs WHERE post_id=?',(post,)).fetchone()[0])
+        snap['account']['identity']='';snap['account']['version']=0
+        db.execute('UPDATE community_jobs SET snapshot=? WHERE post_id=?',(json.dumps(snap),post))
+    before=s.store.rows('SELECT * FROM community_jobs')
+    p=s.daily.save(config(a))['id']
+    assert s.daily.sync_receipts(p)['linked']==1
+    assert s.store.rows('SELECT * FROM community_jobs')==before
+    assert not f.sent and s.daily.state()[0]['days'][0]['counts']['reply']['recorded']==1
+
+
 def test_one_am_does_not_bypass_rolling_24h_after_today_catchup(ctx):
     s,f,a,n=ctx;n[0]=datetime(2026,10,14,15,0,tzinfo=SHANGHAI).timestamp();s.check_account(a)
     for i in range(6):
@@ -76,3 +90,31 @@ def test_one_am_does_not_bypass_rolling_24h_after_today_catchup(ctx):
     assert len(queued)==6
     assert min(j['due'] for j in queued)>=datetime(2026,10,15,15,0,tzinfo=SHANGHAI).timestamp()
     assert any('滚动24小时' in j['message'] for j in queued)
+
+
+def test_explicit_today_continuation_preserves_old_snapshot_and_counts_each_post_once(ctx):
+    s,f,a,n=ctx;p=s.daily.save(config(a))['id'];s.daily.control(p,'enable');s.daily.prepare(p,force=True)
+    s.daily.control(p,'pause')
+    with s.store.connect(True) as db:
+        for r in db.execute('SELECT id,snapshot FROM community_jobs').fetchall():
+            snap=json.loads(r['snapshot']);snap['revision']='earlier-deployment'
+            db.execute('UPDATE community_jobs SET snapshot=? WHERE id=?',(json.dumps(snap),r['id']))
+    before=s.store.rows('SELECT id,snapshot,receipt FROM community_jobs ORDER BY id')
+    s.daily.control(p,'enable')
+    assert s.daily.control(p,'continue-today')['queued']==6
+    assert s.daily.control(p,'continue-today')['queued']==0
+    assert s.store.rows("SELECT id,snapshot,receipt FROM community_jobs WHERE state='cancelled' ORDER BY id")==before
+    counts=s.daily.state()[0]['days'][0]['counts']
+    assert counts['thread']['planned']==1 and counts['reply']['planned']==5
+    assert len(s.state()['posts'])==6 and not f.sent
+
+
+def test_today_continuation_cannot_retry_uncertain_submission(ctx):
+    s,f,a,n=ctx;p=s.daily.save(config(a))['id'];s.daily.control(p,'enable');s.daily.prepare(p,force=True)
+    s.daily.control(p,'pause')
+    with s.store.connect(True) as db:
+        db.execute("UPDATE community_jobs SET state='unknown',started=?,receipt=?",(n[0],json.dumps({'phase':'native_submit_reserved','submitted':None})))
+    before=s.store.rows('SELECT * FROM community_jobs ORDER BY id')
+    s.daily.control(p,'enable')
+    assert s.daily.control(p,'continue-today')['queued']==0
+    assert s.store.rows('SELECT * FROM community_jobs ORDER BY id')==before and not f.sent

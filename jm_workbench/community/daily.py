@@ -63,7 +63,8 @@ class DailyPlans:
                 checks=self.store.rows('SELECT next_check,attempts,reply_goal FROM community_plan_checks WHERE plan_id=? AND day=?',(p['id'],d['day']))
                 d.update(checks[0] if checks else {'next_check':0,'attempts':0,'reply_goal':5})
                 jobs=self.store.rows('''SELECT i.kind,j.state FROM community_plan_items i JOIN community_jobs j ON j.post_id=i.post_id
-                    WHERE i.plan_id=? AND i.day=? AND j.account_id=?''',(p['id'],d['day'],p['payload']['account_id']))
+                    WHERE i.plan_id=? AND i.day=? AND j.account_id=?
+                    AND j.rowid=(SELECT x.rowid FROM community_jobs x WHERE x.post_id=j.post_id AND x.account_id=j.account_id ORDER BY x.created DESC,x.rowid DESC LIMIT 1)''',(p['id'],d['day'],p['payload']['account_id']))
                 d['counts']={k:{'planned':sum(j['kind']==k for j in jobs),'submitted':sum(j['kind']==k and j['state']=='submitted' for j in jobs),
                    'recorded':sum(j['kind']==k and j['state']=='recorded' for j in jobs),
                    'waiting':sum(j['kind']==k and j['state'] in ('queued','paused') for j in jobs),'failed':sum(j['kind']==k and j['state'] in ('failed','unknown') for j in jobs)} for k in ('thread','reply')}
@@ -136,6 +137,7 @@ class DailyPlans:
         return {'id':ident,'message':f"每日计划已保存；每天1篇帖子、评论{data['replies_per_day']}个不同帖子；缺口会定时重查"}
 
     def control(self,ident,action):
+        if action=='continue-today':return self.s.backfill.queue(ident,today_only=True)
         if action=='sync-receipts':return self.sync_receipts(ident)
         if action=='prepare-materials':
             return self.s.materials.request(ident)
@@ -165,15 +167,21 @@ class DailyPlans:
             local=datetime.fromtimestamp(now,SHANGHAI);day=local.date().isoformat()
             midnight=local.replace(hour=0,minute=0,second=0,microsecond=0).timestamp()
             rows=list(db.execute("""SELECT j.post_id,j.snapshot,j.receipt FROM community_jobs j
-                WHERE j.account_id=? AND j.identity=? AND j.platform=?
+                WHERE j.account_id=? AND j.platform=?
+                  AND (j.identity=? OR (j.state='recorded' AND j.identity=?))
                   AND ((j.state='submitted' AND j.started>=? AND j.started<?)
                    OR (j.state='recorded' AND j.updated>=? AND j.updated<?))""",
-                (a['id'],a['identity'],a['platform'],midnight,midnight+86400,midnight,midnight+86400)))
+                (a['id'],a['platform'],a['identity'],'manual:'+a['id'],midnight,midnight+86400,midnight,midnight+86400)))
             linked=0
             for row in rows:
                 receipt=json.loads(row['receipt'])
                 if not receipt.get('url'):continue
-                payload=json.loads(row['snapshot'])['payload'];kind=payload.get('kind','thread')
+                snapshot=json.loads(row['snapshot'])
+                # Earlier web-only records use an account-scoped manual identity.
+                # Preserve that weaker evidence; never attribute a different known identity.
+                saved_account=snapshot.get('account',{})
+                if saved_account.get('id')!=a['id'] or saved_account.get('identity') not in ('',a['identity']):continue
+                payload=snapshot['payload'];kind=payload.get('kind','thread')
                 if kind not in ('thread','reply'):continue
                 linked+=db.execute('INSERT OR IGNORE INTO community_plan_items VALUES(?,?,?,?,?)',(ident,day,kind,material_id(payload['body']),row['post_id'])).rowcount
             if linked:
