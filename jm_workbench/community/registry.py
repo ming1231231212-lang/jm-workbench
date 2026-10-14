@@ -3,7 +3,7 @@ import re
 from urllib.parse import quote, urlparse
 
 _ROWS = [
-    ('zhihu','知乎','国内','AI应用 互联网 职场','web','https://www.zhihu.com/','https://zhuanlan.zhihu.com/write','文章/问答','',100),
+    ('zhihu','知乎','国内','AI应用 互联网 职场','web','https://www.zhihu.com/','https://zhuanlan.zhihu.com/write','专栏文章 / 文章和回答下的网页评论','',100),
     ('tieba','百度贴吧','国内','AI 互联网 综合兴趣','browser','https://tieba.baidu.com/','https://tieba.baidu.com/','文字主题帖 / 顶层评论（正文≤2000字）','吧名，如人工智能；名称本身带“吧”字时保留',31),
     ('xiaohongshu','小红书','国内','AI工具 效率 生活','web','https://www.xiaohongshu.com/','https://creator.xiaohongshu.com/publish/publish','笔记','',20),
     ('csdn','CSDN','国内','AI开发 编程 技术','browser','https://www.csdn.net/','https://editor.csdn.net/md/','技术文章 / 顶层评论','文章填博客；评论填写文章HTTPS链接',100),
@@ -31,6 +31,8 @@ for p in PLATFORMS.values():
     p.update(mode_label=MODES[p['mode']], automatic=p['mode'] in ('api','browser'), verification='适配器模拟测试；真实发帖未验收')
     p['capabilities']={'local_draft':True,'open_website':True,'record_link':True,
         'auto_publish':p['automatic'],'auto_comment':p['id'] in ('tieba','juejin','csdn'),
+        'comment_draft':p['id'] in ('tieba','juejin','csdn','zhihu'),
+        'web_comment':p['id'] in ('tieba','juejin','csdn','zhihu'),
         'daily_plan':p['id'] in ('tieba','juejin','csdn'),'export_content':True}
     p['note'] = ('禁止自动发帖和AI生成/改写文字，请本人撰写并在网站提交。' if p['id']=='hackernews' else
                  '账号需具备API权限；仅保存密钥不代表可以发布。' if p['mode']=='api' else
@@ -38,6 +40,9 @@ for p in PLATFORMS.values():
                  '工作台管理草稿、打开账号网页、复制内容、登记链接；最终在网站提交。')
     if p['id']=='wechat_mp':
         p['note']='支持本地草稿、导出排版、打开公众平台与登记文章链接。当前需在公众平台完成发布；个人号不默认具备接口发布权限。'
+    if p['id']=='zhihu':
+        p['note']='支持专栏文章、文章和回答下的网页评论；使用日常Chrome提交后登记链接。自动发布与每日计划未启用。'
+        p['verification']='网页交接流程测试；实际发布与公开可见性未验收'
 
 
 def platform(ident):
@@ -57,6 +62,8 @@ def publication_platform(config, ident):
 
 def destination(platform_id, value):
     value = value.strip()
+    if platform_id == 'zhihu' and value:
+        raise ValueError('知乎专栏文章无需填写板块；评论请使用原帖文章或回答链接')
     if platform_id == 'tieba' and (not value or len(value)>50 or re.search(r'[\x00-\x1f<>]', value)):
         raise ValueError('请填写有效的贴吧吧名/板块')
     if platform_id == 'juejin' and value not in ('人工智能','开发工具','前端','后端','Android','iOS','代码人生','阅读'):
@@ -74,6 +81,8 @@ def destination(platform_id, value):
 
 def compose_url(platform_id, target=''):
     p = platform(platform_id)
+    if platform_id=='zhihu' and target:
+        return thread_url(platform_id,target)
     if platform_id=='tieba' and target:
         if target.startswith('https://'):
             return tieba_thread_url(target)
@@ -127,7 +136,17 @@ def thread_url(platform_id,value):
     if platform_id=='tieba':return tieba_thread_url(value)
     if platform_id=='juejin':return juejin_thread_url(value)
     if platform_id=='csdn':return csdn_thread_url(value)
+    if platform_id=='zhihu':
+        from .zhihu import comment_target_url
+        return comment_target_url(value)
     raise ValueError('此平台尚未支持评论')
+
+
+def reply_target_key(platform_id,value):
+    if platform_id=='zhihu':
+        from .zhihu import comment_target_key
+        return comment_target_key(value)
+    return thread_url(platform_id,value)
 
 
 def tag_label(value):

@@ -11,7 +11,7 @@ from ..core.db import dumps, uid
 from ..core.config import revision
 from .adapters import CommunityAdapter, NotSubmitted, PreflightStopped, RetryablePreflight, IdentityChanged
 from .bounded import BoundedCommunityAdapter
-from .registry import PLATFORMS, platform, publication_platform, destination, compose_url, safe_post_url, tieba_thread_url, thread_url
+from .registry import PLATFORMS, platform, publication_platform, destination, compose_url, safe_post_url, tieba_thread_url, thread_url, reply_target_key
 from .secrets import seal, unseal
 
 ACTIVE = ('queued','running','paused','unknown','manual')
@@ -45,10 +45,10 @@ class Community:
               value TEXT, job_id TEXT, created REAL, PRIMARY KEY(platform,identity,scope,value));
             ''')
             # Add an index of historical writes without changing their snapshots.
-            for row in db.execute("SELECT id,platform,identity,snapshot,created FROM community_jobs WHERE platform IN ('tieba','juejin','csdn') AND state IN ('queued','running','paused','submitted','unknown','manual','recorded')").fetchall():
+            for row in db.execute("SELECT id,platform,identity,snapshot,created FROM community_jobs WHERE platform IN ('tieba','juejin','csdn','zhihu') AND state IN ('queued','running','paused','submitted','unknown','manual','recorded')").fetchall():
                 snap=json.loads(row['snapshot']);payload=snap['payload']
                 keys=[('content',content_key(payload['body']))]
-                if payload.get('kind')=='reply':keys.append(('reply_target',thread_url(row['platform'],snap['destination'])))
+                if payload.get('kind')=='reply':keys.append(('reply_target',reply_target_key(row['platform'],snap['destination'])))
                 for scope,value in keys:
                     db.execute('INSERT OR IGNORE INTO community_claims VALUES(?,?,?,?,?,?)',(row['platform'],row['identity'],scope,value,row['id'],row['created']))
         from .daily import DailyPlans
@@ -174,8 +174,9 @@ class Community:
                     if not raw:raise ValueError('社区账号不存在')
                     a={**json.loads(raw['data']),'id':raw['id'],'version':raw['version'],'identity':raw['identity'],'checked':raw['checked']}
                     kind=payload.get('kind','thread')
-                    if kind=='reply' and a['platform'] not in ('tieba','juejin','csdn'):raise ValueError('当前仅百度贴吧、掘金、CSDN支持评论发布')
-                    p=publication_platform(self.cfg.config,a['platform']);dest=thread_url(a['platform'],t['destination']) if kind=='reply' else destination(a['platform'],t['destination'])
+                    p=publication_platform(self.cfg.config,a['platform'])
+                    if kind=='reply' and not p['capabilities'].get('comment_draft'):raise ValueError('该平台尚未接入评论发布')
+                    dest=thread_url(a['platform'],t['destination']) if kind=='reply' else destination(a['platform'],t['destination'])
                     if not a['enabled']:raise ValueError(a['name']+'：账号已停用')
                     if len(payload['title'])>p['title_limit']:raise ValueError(p['name']+'标题过长')
                     if a['platform']=='tieba' and ((kind=='thread' and len(payload['title'])<5) or len(payload['body'])>2000):raise ValueError('贴吧标题需5–31字，正文最多2000字')
@@ -185,6 +186,9 @@ class Community:
                     if a['platform']=='juejin':
                         from .juejin import validate_payload
                         validate_payload(payload,dest)
+                    if a['platform']=='zhihu':
+                        from .zhihu import validate_payload
+                        validate_payload(payload)
                     if a['platform']=='x' and len(payload['title']+'\n\n'+payload['body'])>280:raise ValueError('X标题与正文合计最多280字符')
                     if a['platform']=='huggingface' and len(payload['title'])<3:raise ValueError('Hub标题至少3个字符')
                     if a['platform']=='dev' and payload['body'].lstrip().startswith('---'):raise ValueError('DEV正文不能以YAML配置头开头')
@@ -196,9 +200,9 @@ class Community:
                     digest=hashlib.sha256(dumps([dest,payload['title'],payload['body'],payload['tags']]).encode()).hexdigest()
                     snapshot={'account':a,'payload':payload,'destination':dest,'revision':self.cfg.code_revision}
                     job_id=uid()
-                    if a['platform'] in ('tieba','juejin','csdn'):
+                    if a['platform'] in ('tieba','juejin','csdn','zhihu'):
                         keys=[('content',content_key(payload['body']))]
-                        if kind=='reply':keys.append(('reply_target',dest))
+                        if kind=='reply':keys.append(('reply_target',reply_target_key(a['platform'],dest)))
                         for scope,value in keys:
                             db.execute('INSERT INTO community_claims VALUES(?,?,?,?,?,?)',(a['platform'],identity,scope,value,job_id,now))
                     planned.append((job_id,ident,a['platform'],a['id'],identity,digest,'queued' if p['automatic'] else 'manual',dumps(snapshot),max(now,payload['schedule_at']),now,now))
@@ -304,7 +308,7 @@ class Community:
         if len(note.strip())<12 or outcome not in ('submitted','not_sent'):raise ValueError('请填写完整的核实结果')
         job=self.job(ident)
         receipt={'note':note,'visibility':'user_reported'}
-        if outcome=='submitted':receipt['url']=safe_post_url(job['platform'],url)
+        if outcome=='submitted':receipt['url']=self.publication_url(job,url)
         with self.store.connect(True) as db:
             if db.execute('SELECT state FROM community_jobs WHERE id=?',(ident,)).fetchone()['state']!='unknown':raise ValueError('仅结果不明记录需要此处理')
             db.execute('UPDATE community_jobs SET state=?,receipt=?,message=?,updated=? WHERE id=?',('recorded' if outcome=='submitted' else 'not_sent',dumps(receipt),'用户核实：'+note,self.clock(),ident))
@@ -331,12 +335,19 @@ class Community:
 
     def record_url(self,ident,url):
         job=self.job(ident)
-        url=safe_post_url(job['platform'],url)
+        url=self.publication_url(job,url)
         with self.store.connect(True) as db:
             r=db.execute('SELECT state FROM community_jobs WHERE id=?',(ident,)).fetchone()
             if r['state']!='manual':raise ValueError('仅网页待发布记录支持登记链接')
             db.execute("UPDATE community_jobs SET state='recorded',receipt=?,message='用户登记链接 · 未核验公开可见',updated=? WHERE id=?",(dumps({'url':url,'visibility':'user_reported'}),self.clock(),ident))
         return {'message':'链接已登记，公开可见性尚未核验'}
+
+    def publication_url(self,job,url):
+        url=safe_post_url(job['platform'],url)
+        if job['platform']=='zhihu':
+            from .zhihu import record_url
+            return record_url(job['snapshot']['payload'],job['snapshot']['destination'],url)
+        return url
 
     def switch_to_web(self,ident):
         """Explicit handoff of proven unsent work. Keep identity, claims and snapshot."""

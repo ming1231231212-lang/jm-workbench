@@ -114,9 +114,9 @@ def test_daily_separate_thread_and_reply_budgets(ctx):
 
 def test_other_platform_reply_is_rejected(ctx):
     s,_,_,_=ctx
-    a=s.save_account(CommunityAccount(name='web only',platform='zhihu'))
+    a=s.save_account(CommunityAccount(name='web only',platform='quora'))
     pid=reply(s,a['id'])
-    with pytest.raises(ValueError,match='仅百度贴吧'):s.launch(pid)
+    with pytest.raises(ValueError,match='尚未接入'):s.launch(pid)
 
 
 def test_preflight_failure_can_resume_same_reservation_without_consuming_budget(ctx):

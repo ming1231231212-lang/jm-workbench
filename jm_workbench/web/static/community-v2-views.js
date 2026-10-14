@@ -16,6 +16,7 @@ import {
   filterPosts,
   localDay,
   safeLink,
+  commentWorkflow,
 } from "./community-v2-model.js";
 
 export const badge = (s) =>
@@ -137,9 +138,9 @@ export function accountsView(data, u) {
           .toLowerCase()
           .includes(u.q.toLowerCase())),
   );
-  return `<div class="platform-shortcuts"><span>常用平台</span>${["tieba","juejin","weibo","wechat_mp"].filter(id=>data.platforms.some(p=>p.id===id)).map(id=>small("添加"+getPlatform(data,id).name,"com-add-platform",id)).join("")}</div><div class="section-heading"><div><h2>我的账号</h2><p>连接与发布权限分别显示，遇到问题知道从哪里处理。</p></div></div><div class="content-top"><div class="segmented">${b("账号列表", "com-v2-account-mode", "list", u.accountMode === "list" ? "active" : "")}${b("更多平台和发布方式 · " + data.platforms.length, "com-v2-account-mode", "matrix", u.accountMode === "matrix" ? "active" : "")}</div><span class="hint">${data.accounts.filter((a) => connectionStatus(a).key === "connected").length} / ${data.accounts.length} 个账号已核验</span></div><section class="panel">${toolbar(data, u, "accounts")}${
+  return `<div class="platform-shortcuts"><span>常用平台</span>${["tieba","juejin","zhihu","weibo","wechat_mp"].filter(id=>data.platforms.some(p=>p.id===id)).map(id=>small("添加"+getPlatform(data,id).name,"com-add-platform",id)).join("")}</div><div class="section-heading"><div><h2>我的账号</h2><p>连接与发布权限分别显示，遇到问题知道从哪里处理。</p></div></div><div class="content-top"><div class="segmented">${b("账号列表", "com-v2-account-mode", "list", u.accountMode === "list" ? "active" : "")}${b("更多平台和发布方式 · " + data.platforms.length, "com-v2-account-mode", "matrix", u.accountMode === "matrix" ? "active" : "")}</div><span class="hint">${data.accounts.filter((a) => connectionStatus(a).key === "connected").length} / ${data.accounts.length} 个账号已核验</span></div><section class="panel">${toolbar(data, u, "accounts")}${
     u.accountMode === "matrix"
-      ? `<div class="table-wrap"><table class="matrix"><thead><tr><th>平台</th><th>帖子</th><th>评论 / 每日计划</th><th>内容方向</th><th>操作</th></tr></thead><tbody>${platforms.map((p) => `<tr><td>${platform(data, p.id)}<span class="subtext">${e(p.region)}</span></td><td>${e(p.mode_label)}</td><td>${["tieba", "juejin", "csdn"].includes(p.id) ? "已接入，需账号权限" : "尚未接入"}</td><td>${e(p.categories)}</td><td>${small("添加账号", "com-add-platform", p.id)}</td></tr>`).join("")}</tbody></table></div><div class="matrix-note">接入能力不等于账号具备发布权限。网页登录、API授权、平台限制分别检查；网页发布平台需在网站完成提交。</div>`
+      ? `<div class="table-wrap"><table class="matrix"><thead><tr><th>平台</th><th>帖子</th><th>评论 / 每日计划</th><th>内容方向</th><th>操作</th></tr></thead><tbody>${platforms.map((p) => `<tr><td>${platform(data, p.id)}<span class="subtext">${e(p.region)}</span></td><td>${e(p.mode_label)}</td><td>${e(commentWorkflow(p))}</td><td>${e(p.categories)}</td><td>${small("添加账号", "com-add-platform", p.id)}</td></tr>`).join("")}</tbody></table></div><div class="matrix-note">接入能力不等于账号具备发布权限。网页登录、API授权、平台限制分别检查；网页发布平台需在网站完成提交。</div>`
       : list.length
         ? `<div class="table-wrap"><table class="account-table"><thead><tr><th>账号</th><th>平台</th><th>连接状态</th><th>发布方式</th><th class="col-last">最近核验</th><th>操作</th></tr></thead><tbody>${list
             .map((a) => {

@@ -33,6 +33,10 @@ export const tones = {
 export const getAccount = (data, id) => data.accounts?.find((a) => a.id === id);
 export const getPlatform = (data, id) =>
   data.platforms?.find((p) => p.id === id) || { id, name: id || "未知平台" };
+export function commentWorkflow(p) {
+  const c = p.capabilities || {};
+  return `评论：${c.auto_comment ? "自动发布" : c.web_comment ? "网页发布" : "未接入"}；每日计划：${c.daily_plan ? "需账号权限" : "不可用"}`;
+}
 const describe = (key, reason = "") => ({
   key,
   label: statusLabels[key] || key,
