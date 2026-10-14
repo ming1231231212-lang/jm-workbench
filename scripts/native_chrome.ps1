@@ -198,6 +198,13 @@ if($q.action -in @('focus-copy','focus-paste','focus-clear')){
   [System.Windows.Forms.SendKeys]::SendWait('^a');[System.Windows.Forms.SendKeys]::SendWait('^v')
  }
  Guard;[System.Windows.Forms.Clipboard]::Clear();[System.Windows.Forms.SendKeys]::SendWait('^a');[System.Windows.Forms.SendKeys]::SendWait('^c')
+ # SendWait waits for key delivery, not Chrome's asynchronous clipboard write.
+ # A genuinely empty editor remains empty after this bounded read-only wait.
+ for($copyWait=0;$copyWait -lt 40;$copyWait++){
+  if([System.Windows.Forms.Clipboard]::ContainsText()){break}
+  Start-Sleep -Milliseconds 25
+ }
+ Start-Sleep -Milliseconds 50
  $copied=[System.Windows.Forms.Clipboard]::GetText()
  if($q.action -eq 'focus-clear'){
   if($copied -cne $q.text){throw '临时输入内容改变，已保留，未清空'}
