@@ -65,20 +65,28 @@ class NativeChromeChannel:
     def clear_draft(self):
         self.state.pop('draft',None);self.save()
 
+    def record_editor_mismatch(self,payload,title,body):
+        if self.state.get('draft')!=self.fingerprint(payload):return
+        self.path.with_suffix('.preflight.json').write_text(json.dumps({
+            'url':self.expected,'expected_title':payload['title'],'expected_body':payload['body'],
+            'read_title':title,'read_body':body},ensure_ascii=False,indent=2),encoding='utf-8')
+
     def open_receipt(self,url,title):
         """Follow an observed result link after the single submit, not an editor."""
         from .registry import thread_url
+        from .registry import juejin_article_result_url
         from .native import normalized
         old,new=urlsplit(self.expected),urlsplit(url)
         platform={'juejin.cn':'juejin','tieba.baidu.com':'tieba'}.get(old.hostname)
         expected_path={'juejin':'/published','tieba':'/f'}.get(platform)
-        if not platform or old.path!=expected_path or new.hostname!=old.hostname or thread_url(platform,url)!=url:
+        result_url=lambda value:juejin_article_result_url(value) if platform=='juejin' else thread_url(platform,value)
+        if not platform or old.path!=expected_path or new.hostname!=old.hostname or result_url(url)!=url:
             raise NativeStopped('回执导航不属于当前平台结果页，未离开原稿')
         s=self.call('snapshot')
         observed=[]
         for n in s.get('nodes',[]):
             if not n.get('visible') or n.get('type')!='Hyperlink' or normalized(title) not in normalized(n.get('name','')):continue
-            try:observed.append(thread_url(platform,n.get('value','')))
+            try:observed.append(result_url(n.get('value','')))
             except ValueError:continue
         if url not in observed:
             raise NativeStopped('结果链接未在当前页面核对，未离开原稿')
@@ -138,6 +146,8 @@ class NativeChromeChannel:
                 valid = valid or (old.hostname == new.hostname == 'zhuanlan.zhihu.com' and re.fullmatch(r'/p/[1-9][0-9]{3,23}/edit', old.path) and new.path == old.path.removesuffix('/edit'))
                 valid = valid or (old.hostname == new.hostname == 'juejin.cn' and old.path.startswith('/editor/drafts/') and re.fullmatch(r'/post/[1-9][0-9]{15,23}', new.path))
                 valid = valid or (old.hostname == new.hostname == 'juejin.cn' and old.path.startswith('/editor/drafts/') and new.path == '/published')
+                valid = valid or (old.hostname == new.hostname == 'juejin.cn' and old.path == '/published' and re.fullmatch(r'/post/[1-9][0-9]{15,23}',new.path))
+                valid = valid or (old.hostname == new.hostname == 'juejin.cn' and re.fullmatch(r'/spost/[1-9][0-9]{10,23}',old.path) and new.path==old.path.replace('/spost/','/post/',1))
                 valid = valid or (old.hostname == new.hostname == 'tieba.baidu.com' and old.path == '/f' and re.fullmatch(r'/p/[1-9][0-9]{3,23}', new.path))
             if not valid:
                 raise NativeStopped('页面没有按预期进入本次编辑或结果页，未接管其他页面')

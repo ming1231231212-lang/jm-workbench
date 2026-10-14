@@ -307,7 +307,13 @@ def prepare_article(p, account, binding, payload, target):
         s = p._snapshot(url)
     title_node, body_node = fields(s, platform)
     old_title,old_body=copy(p,title_node,url),copy(p,body_node,url)
+    if resumed:
+        for _ in range(3):
+            if normalized(old_title)==normalized(title) and normalized(old_body) in ('',normalized(body)):break
+            p.sleep(.5);s=editor(p);url=s['url'];title_node,body_node=fields(s,platform)
+            old_title,old_body=copy(p,title_node,url),copy(p,body_node,url)
     if (normalized(old_title) or normalized(old_body)) and (not resumed or normalized(old_title)!=normalized(title) or normalized(old_body) not in ('',normalized(body))):
+        if resumed and hasattr(p.ui,'record_editor_mismatch'):p.ui.record_editor_mismatch(payload,old_title,old_body)
         raise NativeStopped('文章编辑器已有内容，已保留原稿，未提交')
     if hasattr(p.ui,'mark_draft'):p.ui.mark_draft(payload)
     if not normalized(old_title):paste(p, title_node, url, title)
@@ -346,22 +352,25 @@ def author_scope(s, binding, body):
 
 def verify_article(p, account, binding, payload):
     platform = account['platform']
+    from .registry import juejin_article_result_url
+    result_url=lambda value:juejin_article_result_url(value) if platform=='juejin' else thread_url(platform,value)
     for _ in range(p.poll_attempts):
         p.sleep(1)
         try:
             s = p.ui.call('follow_published')
-            try: url = thread_url(platform,s['url'])
+            try: url = result_url(s['url'])
             except ValueError:
                 links = []
                 for n in visible(s):
                     if n['type'] != 'Hyperlink' or normalized(payload['title']) not in normalized(n.get('name')):continue
-                    try: links.append(thread_url(platform,n.get('value','')))
+                    try: links.append(result_url(n.get('value','')))
                     except ValueError:pass
                 links = list(dict.fromkeys(links))
-                if len(links) != 1:continue
-                if hasattr(p.ui,'open_receipt'):p.ui.open_receipt(links[0],payload['title'])
-                else:p.ui.call('open',url=links[0])
-                s = p._wait_page(links[0]);url = links[0]
+                if len(links)==1:
+                    if hasattr(p.ui,'open_receipt'):p.ui.open_receipt(links[0],payload['title'])
+                    else:p.ui.call('open',url=links[0])
+                    s=p.ui.call('follow_published');url=result_url(s['url'])
+                else:continue
             text = rendered(s['text'])
             docs=[n for n in s['nodes'] if n['type']=='Document']
             semantic=rendered(semantic_value(s,docs[0]['key'],s['text'],strict=False)) if len(docs)==1 else text

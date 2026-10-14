@@ -57,8 +57,9 @@ def test_published_zhihu_article_must_match_this_editor_id(tmp_path):
     with pytest.raises(NativeStopped): ui.call('follow_published')
 
 
-def test_owned_submitted_draft_can_follow_observed_article_receipt_only(tmp_path):
-    target='https://juejin.cn/post/1234567890123456'
+@pytest.mark.parametrize('route',['post','spost'])
+def test_owned_submitted_draft_can_follow_observed_article_receipt_only(tmp_path,route):
+    target='https://juejin.cn/'+route+'/1234567890123456'
     class Result(Channel):
         def raw(self,action,**kw):
             value=super().raw(action,**kw)
@@ -77,6 +78,14 @@ def test_result_navigation_cannot_leave_unsent_editor(tmp_path):
     ui.expected=ui.live;ui.state={'key':'owned','url':ui.live,'draft':'keep'}
     with pytest.raises(NativeStopped):ui.open_receipt('https://juejin.cn/post/1234567890123456','title')
     assert ui.state['draft']=='keep' and not any(a=='navigate' for a,_ in ui.actions)
+
+
+def test_observed_short_result_can_redirect_only_to_its_own_article(tmp_path):
+    ui=Channel(tmp_path/'tab.json','https://juejin.cn/post/1234567890123456')
+    ui.expected='https://juejin.cn/spost/1234567890123456';ui.state={'key':'owned','url':ui.expected}
+    assert ui.call('follow_published')['url']==ui.live
+    ui.expected='https://juejin.cn/spost/9999999999999999'
+    with pytest.raises(NativeStopped):ui.call('follow_published')
 
 
 def native_runner(monkeypatch, result, returncode=0):

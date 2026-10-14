@@ -258,6 +258,34 @@ def test_owned_partial_draft_resumes_only_the_exact_saved_title():
     with pytest.raises(NativeStopped):prepare_article(NativePublisher(ui,sleep=lambda _:None),{'platform':'zhihu'},{'name':'fixture'},{'title':'如何核对AI任务结果','body':'说明：本文使用AI辅助整理。不得覆盖这份不同标题的草稿。','platform_tags':['人工智能']},'')
 
 
+def test_owned_existing_draft_waits_for_readback_without_overwriting():
+    class Loading(ArticleUI):
+        title_reads=0;pastes=0
+        def resume_article(self,payload):return self.snapshot()
+        def call(self,action,**kw):
+            if action=='focus-copy' and kw['key']=='title':
+                self.title_reads+=1
+                if self.title_reads==1:return {'value':''}
+            if action in ('focus-paste','paste'):self.pastes+=1
+            return super().call(action,**kw)
+    ui=Loading('tieba');ui.url='https://tieba.baidu.com/f?kw=ai工具';ui.title='核对AI任务结果';ui.body='说明：本文使用AI辅助整理。完整保存来源和输入输出。'
+    prepare_article(NativePublisher(ui,sleep=lambda _:None),{'platform':'tieba'},{'name':'fixture'},{'title':ui.title,'body':ui.body,'platform_tags':[]},'ai工具')
+    assert ui.pastes==0 and not ui.overwritten
+
+
+def test_juejin_success_short_link_opens_original_and_checks_full_body():
+    profile='https://juejin.cn/user/1234567890123456';title='核对AI任务结果';body='这是带有完整具体内容的原始正文，核验原始输入输出和未知项，不能只根据发布成功提示判为已完成。'
+    class Result:
+        opened=False;links=[]
+        def call(self,action,**kw):
+            if action=='open':self.links.append(kw['url']);self.opened=True;return {}
+            assert action in ('snapshot','follow_published')
+            if not self.opened:return {'url':'https://juejin.cn/published','text':'《'+title+'》 发布成功', 'nodes':[{'key':'result-title','type':'Hyperlink','name':'《'+title+'》','visible':True,'value':'https://juejin.cn/spost/1234567890123456'}]}
+            value=result_snapshot(profile,title,body);value['url']='https://juejin.cn/post/1234567890123456';return value
+    ui=Result();r=verify_article(NativePublisher(ui,sleep=lambda _:None),{'platform':'juejin'},{'profile_url':profile,'name':'fixture'},{'title':title,'body':body})
+    assert ui.links==['https://juejin.cn/spost/1234567890123456'] and r['visibility']=='account_visible' and r['body']==body
+
+
 def test_platform_link_wrapper_and_profile_subpages_keep_the_actual_identity():
     from jm_workbench.community.native_articles import link_destination
     assert link_destination('https://tieba.baidu.com/mo/q/checkurl?url=https%3A%2F%2Ffixture.example%2F&urlrefer=opaque')=='https://fixture.example/'

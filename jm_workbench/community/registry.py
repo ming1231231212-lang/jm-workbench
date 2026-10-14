@@ -132,6 +132,18 @@ def juejin_thread_url(value):
     return 'https://juejin.cn'+parsed.path
 
 
+def juejin_article_result_url(value):
+    """Accept an observed publication result, including Juejin's /spost link.
+
+    Comment targets still require the ordinary /post route.
+    """
+    parsed=urlparse(value.strip())
+    if (parsed.scheme!='https' or parsed.hostname!='juejin.cn' or parsed.username or parsed.password or
+        parsed.port not in (None,443) or not re.fullmatch(r'/(?:post|spost)/[1-9][0-9]{10,23}',parsed.path)):
+        raise ValueError('掘金文章回执链接无效')
+    return 'https://juejin.cn'+parsed.path
+
+
 def csdn_thread_url(value):
     parsed=urlparse(value.strip())
     if (parsed.scheme!='https' or parsed.hostname!='blog.csdn.net' or parsed.username or parsed.password or
