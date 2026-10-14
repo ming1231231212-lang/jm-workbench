@@ -289,7 +289,17 @@ def prepare_article(p, account, binding, payload, target):
     if platform == 'tieba' and not any(n.get('id') == 'tb-editor-title' for n in s['nodes']):
         choices = [n for n in visible(s) if n.get('name') == '发贴' and n['type'] == 'Text']
         if not choices: raise NativeStopped('贴吧发贴入口未核对，未提交')
-        p._click(choices[0], url); s = p._snapshot(url)
+        for index,choice in enumerate(choices):
+            fresh=p._snapshot(url)
+            node=next((n for n in visible(fresh) if n['key']==choice['key'] and n.get('name')=='发贴'),None)
+            if not node:raise NativeStopped('贴吧发贴入口发生变化，未提交')
+            try:
+                p._click(node,url);break
+            except NativeStopped as ex:
+                # The board has both a global and an inline composer entry.
+                # Only an explicitly occluded, unclicked entry permits another.
+                if '其他窗口遮挡目标控件' not in str(ex) or index==len(choices)-1:raise
+        s = p._snapshot(url)
     title_node, body_node = fields(s, platform)
     old_title,old_body=copy(p,title_node,url),copy(p,body_node,url)
     if (normalized(old_title) or normalized(old_body)) and (not resumed or normalized(old_title)!=normalized(title) or normalized(old_body) not in ('',normalized(body))):

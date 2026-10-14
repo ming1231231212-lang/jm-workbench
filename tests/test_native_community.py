@@ -113,6 +113,20 @@ def test_other_native_accounts_require_own_profile_marker(platform, identity, pr
     assert NativePublisher(ReadOnly()).check(a, {'identity': identity, 'profile_url': profile, 'name': '趣造AI'}) == identity
 
 
+def test_profile_shell_loading_does_not_prematurely_fail_identity():
+    class Loading:
+        reads=0
+        def call(self,action,**kw):
+            assert action in ('open','snapshot')
+            if action=='snapshot':self.reads+=1
+            ready=self.reads>=2
+            return {'url':'https://juejin.cn/user/1234567890123456','text':'趣造AI' if ready else '首页 创作者中心',
+                    'nodes':[{'type':'Button','name':'设置','visible':True}] if ready else []}
+    ui=Loading();a={'platform':'juejin','enabled':True,'identity':'1234567890123456'}
+    assert NativePublisher(ui,sleep=lambda _:None,poll_attempts=3).check(a,{'identity':a['identity'],'profile_url':'https://juejin.cn/user/'+a['identity'],'name':'趣造AI'})==a['identity']
+    assert ui.reads==2
+
+
 def test_verified_profile_alias_is_accepted_only_after_own_profile_check():
     ui = FakeDesktop(); ui.author = ALIAS
     binding = {**BINDING, 'profile_aliases': [ALIAS]}

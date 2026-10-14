@@ -92,6 +92,29 @@ def test_existing_article_draft_is_preserved(platform,board):
     assert ui.body=='existing personal draft' and not ui.overwritten and ui.writes==0
 
 
+@pytest.mark.parametrize('error',['其他窗口遮挡目标控件，未点击','目标标签已变化，未操作'])
+def test_tieba_uses_second_composer_only_when_first_was_occluded(error):
+    class Overlay(ArticleUI):
+        opened=False;attempted=[]
+        def snapshot(self):
+            if self.opened:return super().snapshot()
+            return {'url':self.url,'text':'ai工具吧','nodes':[self.node('global','Text','发贴'),self.node('inline','Text','发贴')]}
+        def call(self,action,**kw):
+            if action=='click' and kw.get('key') in ('global','inline'):
+                self.attempted.append(kw['key'])
+                if kw['key']=='global':raise NativeStopped(error)
+                self.opened=True;return {}
+            return super().call(action,**kw)
+    ui=Overlay('tieba');p=NativePublisher(ui,sleep=lambda _:None)
+    payload={'title':'核对AI任务结果','body':'说明：本文使用AI辅助整理。保留完整原始输入输出与未知项。','platform_tags':[]}
+    if '遮挡' in error:
+        result=prepare_article(p,{'platform':'tieba'},{'name':'fixture'},payload,'ai工具')
+        assert result['submit']['key']=='publish' and ui.attempted==['global','inline']
+    else:
+        with pytest.raises(NativeStopped):prepare_article(p,{'platform':'tieba'},{'name':'fixture'},payload,'ai工具')
+        assert ui.attempted==['global'] and not ui.body
+
+
 @pytest.mark.parametrize('platform,board', [('zhihu',''),('juejin','人工智能')])
 def test_missing_native_tag_option_stops_before_submission(platform,board):
     ui=ArticleUI(platform);ui.fail_tags=True

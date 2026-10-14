@@ -74,6 +74,17 @@ class NativePublisher:
         self._snapshot(url)
         self.ui.call('click', key=node['key'], expected_url=url)
 
+    def _wait_owner(self,platform,profile,name,aliases=()):
+        s=self._wait_page(profile,aliases)
+        for attempt in range(self.poll_attempts):
+            marker=(bool(self._nodes(s,'Button','编辑个人资料')) if platform=='zhihu' else
+                    bool(self._nodes(s,'Button','设置')) if platform=='juejin' else
+                    any(parse_qs(urlsplit(n.get('value','')).query).get('id')==parse_qs(urlsplit(profile).query).get('id') for n in self._nodes(s,'Hyperlink','我的')))
+            if marker and normalized(name) in normalized(s.get('text','')):return s
+            if attempt+1<self.poll_attempts:
+                self.sleep(.5);s=self._wait_page(profile,aliases)
+        raise NativeStopped('本人账号未登录或身份无法核验，未提交')
+
     def check(self, account, binding):
         if self.identity_ui is not None:
             return NativePublisher(self.identity_ui,sleep=self.sleep,poll_attempts=self.poll_attempts).check(account,binding)
@@ -88,19 +99,14 @@ class NativePublisher:
         if account.get('identity') and account['identity'] != identity:
             raise NativeStopped('账号身份已变化，不能自动换账号')
         self.ui.call('open', url=profile)
-        s = self._wait_page(profile)
-        marker = bool(self._nodes(s, 'Button', '编辑个人资料')) if p == 'zhihu' else bool(self._nodes(s, 'Button', '设置')) if p == 'juejin' else any(parse_qs(urlsplit(n.get('value', '')).query).get('id') == parse_qs(u.query).get('id') for n in self._nodes(s, 'Hyperlink', '我的'))
-        if not marker or normalized(binding['name']) not in normalized(s['text']):
-            raise NativeStopped('本人账号未登录或身份无法核验，未提交')
+        s = self._wait_owner(p,profile,binding['name'])
         if p == 'zhihu':
             for alias in binding.get('profile_aliases', []):
                 u = urlsplit(alias)
                 if u.scheme != 'https' or u.hostname != 'www.zhihu.com' or not re.fullmatch(r'/people/[A-Za-z0-9_-]+', u.path) or u.username or u.port or u.query or u.fragment:
                     raise NativeStopped('账号主页别名无效，未提交')
                 self.ui.call('open', url=alias, allowed_redirects=[profile])
-                s = self._wait_page(alias, [profile])
-                if not self._nodes(s, 'Button', '编辑个人资料') or normalized(binding['name']) not in normalized(s['text']):
-                    raise NativeStopped('主页别名不属于当前登录账号，未提交')
+                s = self._wait_owner(p,alias,binding['name'],[profile])
         return identity
 
     def publish(self, account, binding, payload, target):
