@@ -25,8 +25,15 @@ class NativeChromeChannel:
     def raw(self, action, **kwargs):
         if os.name != 'nt' or not self.shell:
             raise NativeStopped('本机Chrome操作需要Windows可交互桌面')
+        command = [self.shell, '-NoProfile', '-STA', '-File', str(ROOT / 'scripts/native_chrome.ps1')]
+        if self.state.get('window'):
+            if not self.state.get('process_id') or not self.state.get('process_started'):
+                raise NativeStopped('日常Chrome窗口绑定不完整，未操作')
+            command += ['-Window', str(self.state['window']),
+                        '-ExpectedProcessId', str(self.state['process_id']),
+                        '-ExpectedProcessStarted', str(self.state['process_started'])]
         try:
-            p = self.runner([self.shell, '-NoProfile', '-STA', '-File', str(ROOT / 'scripts/native_chrome.ps1')],
+            p = self.runner(command,
                 input=json.dumps({'action': action, **({'tab_key':self.state['key']} if self.state.get('key') and action not in ('new','tabs','select') else {}), **kwargs}, ensure_ascii=False),
                 capture_output=True, encoding='utf-8', timeout=25,
                 creationflags=subprocess.CREATE_NO_WINDOW, cwd=ROOT)
@@ -34,7 +41,11 @@ class NativeChromeChannel:
             raise TimeoutError('本机控件操作超时，未重试') from ex
         if p.returncode:
             raise NativeStopped((p.stderr or '本机Chrome操作未完成')[-1200:])
-        return json.loads(p.stdout)
+        result = json.loads(p.stdout)
+        if all(result.get(k) for k in ('window', 'process_id', 'process_started')):
+            self.state.update({k: result[k] for k in ('window', 'process_id', 'process_started')})
+            self.save()
+        return result
 
     def save(self):
         self.path.parent.mkdir(parents=True, exist_ok=True)
@@ -68,7 +79,7 @@ class NativeChromeChannel:
         s = self.raw('snapshot', expected_url=expected_url)
         if not s.get('text'):
             raise NativeStopped('本任务标签的实际网址不一致，未接管')
-        self.state = {'key': candidates[0]['key'], 'url': s['url']}
+        self.state.update(key=candidates[0]['key'], url=s['url'])
         self.expected = s['url']; self.save()
 
     def call(self, action, **kwargs):
@@ -107,8 +118,9 @@ class NativeChromeChannel:
             self.raw('new')
             tabs = [t for t in self.raw('tabs')['tabs'] if t.get('selected')]
             if len(tabs) != 1: raise NativeStopped('新建任务标签无法唯一核对，未导航')
-            self.state = {'key': tabs[0]['key'], 'url': '', 'new': True}; self.save()
-            self.state = {'key': tabs[0]['key'], 'url': self.raw('url')['url']}
+            self.state.update(key=tabs[0]['key'], url='', new=True); self.save()
+            self.state.update(key=tabs[0]['key'], url=self.raw('url')['url'])
+            self.state.pop('new', None)
             self.save()
         self.raw('select', key=self.state['key'])
         actual = self.raw('url')['url']

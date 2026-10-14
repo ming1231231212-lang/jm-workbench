@@ -1,4 +1,7 @@
 import pytest
+import json
+import subprocess
+from types import SimpleNamespace
 
 from jm_workbench.community.native_channel import NativeChromeChannel
 from jm_workbench.community.native import NativeStopped
@@ -52,3 +55,64 @@ def test_published_zhihu_article_must_match_this_editor_id(tmp_path):
     ui = Channel(tmp_path/'tab.json', 'https://zhuanlan.zhihu.com/p/999999')
     ui.expected = 'https://zhuanlan.zhihu.com/p/123456/edit'; ui.state = {'key':'owned','url':ui.expected}
     with pytest.raises(NativeStopped): ui.call('follow_published')
+
+
+def native_runner(monkeypatch, result, returncode=0):
+    import jm_workbench.community.native_channel as module
+    monkeypatch.setattr(module.os, 'name', 'nt')
+    monkeypatch.setattr(module.subprocess, 'CREATE_NO_WINDOW', 0, raising=False)
+    calls = []
+    def runner(command, **kw):
+        calls.append((command, json.loads(kw['input'])))
+        return SimpleNamespace(returncode=returncode, stdout=json.dumps(result), stderr='原日常Chrome进程已变化')
+    return runner, calls
+
+
+def test_verified_window_and_original_process_are_sent_on_every_call(tmp_path, monkeypatch):
+    runner, calls = native_runner(monkeypatch, {'url':'https://www.zhihu.com/'})
+    ui = NativeChromeChannel(tmp_path/'tab.json', runner=runner);ui.shell='powershell'
+    ui.state={'key':'owned','window':134346,'process_id':12464,'process_started':'original-start'}
+    ui.raw('url');ui.raw('select',key='owned')
+    for command, request in calls:
+        assert command[-6:]==['-Window','134346','-ExpectedProcessId','12464','-ExpectedProcessStarted','original-start']
+    assert calls[0][1]['tab_key']=='owned'
+
+
+def test_legacy_tab_binding_is_migrated_only_after_native_validation(tmp_path, monkeypatch):
+    binding={'window':134346,'process_id':12464,'process_started':'original-start'}
+    runner, calls = native_runner(monkeypatch, {'url':'https://www.zhihu.com/',**binding})
+    ui=NativeChromeChannel(tmp_path/'tab.json',runner=runner);ui.shell='powershell'
+    ui.state={'key':'owned','url':'https://www.zhihu.com/','draft':'kept'}
+    ui.raw('url');ui.raw('url')
+    assert '-Window' not in calls[0][0] and '-Window' in calls[1][0]
+    saved=json.loads(ui.path.read_text(encoding='utf-8'))
+    assert saved=={'key':'owned','url':'https://www.zhihu.com/','draft':'kept',**binding}
+
+
+def test_failed_window_validation_never_rebinds_or_retries(tmp_path, monkeypatch):
+    runner,calls=native_runner(monkeypatch,{'window':999,'process_id':99,'process_started':'new'},returncode=1)
+    ui=NativeChromeChannel(tmp_path/'tab.json',runner=runner);ui.shell='powershell'
+    original={'key':'owned','window':134346,'process_id':12464,'process_started':'original'}
+    ui.state=original.copy();ui.save()
+    with pytest.raises(NativeStopped,match='进程已变化'):ui.raw('url')
+    assert len(calls)==1 and ui.state==original
+    assert json.loads(ui.path.read_text(encoding='utf-8'))==original
+
+
+def test_incomplete_window_binding_refuses_before_starting_native_process(tmp_path,monkeypatch):
+    runner,calls=native_runner(monkeypatch,{})
+    ui=NativeChromeChannel(tmp_path/'tab.json',runner=runner);ui.shell='powershell'
+    ui.state={'key':'owned','window':134346}
+    with pytest.raises(NativeStopped,match='绑定不完整'):ui.raw('url')
+    assert calls==[]
+
+
+def test_creating_tab_keeps_verified_window_binding(tmp_path):
+    class Bound(Channel):
+        def raw(self,action,**kw):
+            if action=='new':self.state.update(window=134346,process_id=12464,process_started='original')
+            return super().raw(action,**kw)
+    ui=Bound(tmp_path/'tab.json','https://user.example/')
+    ui.call('open',url='https://www.zhihu.com/people/fixture')
+    assert ui.state['window']==134346 and ui.state['process_started']=='original'
+    assert ui.state['key']=='owned'

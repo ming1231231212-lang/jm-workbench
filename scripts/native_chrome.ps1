@@ -1,4 +1,4 @@
-﻿param([long]$Window=0)
+﻿param([long]$Window=0,[int]$ExpectedProcessId=0,[string]$ExpectedProcessStarted='')
 $ErrorActionPreference='Stop'
 [Console]::InputEncoding=[Text.UTF8Encoding]::new($false)
 [Console]::OutputEncoding=[Text.UTF8Encoding]::new($false)
@@ -8,12 +8,26 @@ Add-Type -AssemblyName UIAutomationTypes
 Add-Type -AssemblyName System.Windows.Forms
 Add-Type 'using System; using System.Runtime.InteropServices; public static class JmNativeChrome { [DllImport("user32.dll")] public static extern bool SetForegroundWindow(IntPtr h); [DllImport("user32.dll")] public static extern IntPtr GetForegroundWindow(); [DllImport("user32.dll")] public static extern bool SetCursorPos(int x,int y); [DllImport("user32.dll")] public static extern void mouse_event(uint f,uint x,uint y,uint d,UIntPtr e); [DllImport("user32.dll")] public static extern IntPtr WindowFromPoint(Point p); [DllImport("user32.dll")] public static extern IntPtr GetAncestor(IntPtr h,uint f); [DllImport("user32.dll")] public static extern uint GetWindowThreadProcessId(IntPtr h,out uint p); [DllImport("kernel32.dll")] public static extern uint GetCurrentThreadId(); [DllImport("user32.dll")] public static extern bool AttachThreadInput(uint a,uint b,bool attach); [DllImport("user32.dll")] public static extern bool BringWindowToTop(IntPtr h); [DllImport("user32.dll")] public static extern bool IsIconic(IntPtr h); [DllImport("user32.dll")] public static extern bool ShowWindow(IntPtr h,int command); [StructLayout(LayoutKind.Sequential)] public struct Point { public int x; public int y; } public static bool Activate(IntPtr h) { if(IsIconic(h)) ShowWindow(h,9); if(GetForegroundWindow()==h) return true; if(SetForegroundWindow(h) && GetForegroundWindow()==h) return true; var f=GetForegroundWindow(); if(f==IntPtr.Zero) return false; uint p; uint foreground=GetWindowThreadProcessId(f,out p), current=GetCurrentThreadId(); bool joined=foreground!=current && AttachThreadInput(current,foreground,true); try { BringWindowToTop(h); SetForegroundWindow(h); return GetForegroundWindow()==h; } finally { if(joined) AttachThreadInput(current,foreground,false); } } }'
 if(!$Window){
- $processes=@(Get-Process chrome -ErrorAction SilentlyContinue | Where-Object {$_.MainWindowHandle -ne 0})
+ $processes=@(Get-Process chrome -ErrorAction SilentlyContinue | Where-Object {$_.MainWindowHandle -ne 0} | Where-Object {
+  $candidate=Get-CimInstance Win32_Process -Filter "ProcessId=$($_.Id)"
+  $candidate.ExecutablePath -eq 'C:\Program Files\Google\Chrome\Application\chrome.exe' -and $candidate.CommandLine -notmatch '--user-data-dir|--incognito|--guest|--remote-debugging'
+ })
  if($processes.Count -ne 1){throw '请保留一个可识别的日常Chrome窗口；未新开浏览器或切换配置'}
- $process=$processes[0]
- $info=Get-CimInstance Win32_Process -Filter "ProcessId=$($process.Id)"
- if($info.ExecutablePath -ne 'C:\Program Files\Google\Chrome\Application\chrome.exe' -or $info.CommandLine -match '--user-data-dir|--incognito|--remote-debugging-port'){throw '当前窗口不是已确认的日常Chrome，未操作'}
- $Window=[long]$process.MainWindowHandle
+ $Window=[long]$processes[0].MainWindowHandle
+}elseif(!$ExpectedProcessId -or !$ExpectedProcessStarted){throw '缺少日常Chrome原进程绑定，未操作'}
+[uint32]$owner=0
+[void][JmNativeChrome]::GetWindowThreadProcessId([IntPtr]$Window,[ref]$owner)
+if(!$owner){throw '原日常Chrome窗口已关闭，未操作'}
+$process=Get-Process -Id $owner -ErrorAction Stop
+$info=Get-CimInstance Win32_Process -Filter "ProcessId=$owner"
+if($process.ProcessName -ne 'chrome' -or $info.ExecutablePath -ne 'C:\Program Files\Google\Chrome\Application\chrome.exe' -or $info.CommandLine -match '--user-data-dir|--incognito|--guest|--remote-debugging'){throw '当前窗口不是已确认的日常Chrome，未操作'}
+$processStarted=$process.StartTime.ToUniversalTime().Ticks.ToString()
+if($ExpectedProcessId -and ($owner -ne $ExpectedProcessId -or $processStarted -cne $ExpectedProcessStarted)){
+ throw '原日常Chrome进程已变化，未接管其他窗口'
+}
+function Result($value){
+ $value.window=$Window;$value.process_id=$owner;$value.process_started=$processStarted
+ $value | ConvertTo-Json -Depth 7 -Compress
 }
 $h=[IntPtr]$Window;$w=[System.Windows.Automation.AutomationElement]::FromHandle($h)
 $scope=[System.Windows.Automation.TreeScope]::Descendants
@@ -75,14 +89,14 @@ function Walk($e,$depth,$parent=''){
 }
 if($q.action -in @('tabs','select','new')){
  $script:stopAtDocument=$true;Walk $w 0
- if($q.action -eq 'tabs'){@{tabs=@($script:nodes|Where-Object {$_.type -eq 'TabItem'});window=$Window}|ConvertTo-Json -Depth 6 -Compress;exit}
+ if($q.action -eq 'tabs'){Result @{tabs=@($script:nodes|Where-Object {$_.type -eq 'TabItem'})};exit}
  if($q.action -eq 'select'){
   $tab=@($script:nodes|Where-Object {$_.type -eq 'TabItem' -and $_.key -eq $q.key})
   if($tab.Count -ne 1){throw '本任务的原始标签已关闭，未选择其他页面'}
   $script:elements[$q.key].GetCurrentPattern([System.Windows.Automation.SelectionItemPattern]::Pattern).Select();Focus
-  @{selected=$q.key;window=$Window}|ConvertTo-Json -Compress;exit
+  Result @{selected=$q.key};exit
  }
- Focus;[System.Windows.Forms.SendKeys]::SendWait('^t');@{created=$true;window=$Window}|ConvertTo-Json -Compress;exit
+ Focus;[System.Windows.Forms.SendKeys]::SendWait('^t');Result @{created=$true};exit
 }
 if($q.action -eq 'close-find'){
  Focus
@@ -91,7 +105,7 @@ if($q.action -eq 'close-find'){
  $close.GetCurrentPattern([System.Windows.Automation.InvokePattern]::Pattern).Invoke()
  @{closed_find=$true}|ConvertTo-Json -Compress;exit
 }
-if($q.action -eq 'url'){@{url=(CurrentUrl);window=$Window}|ConvertTo-Json -Compress;exit}
+if($q.action -eq 'url'){Result @{url=(CurrentUrl)};exit}
 if($q.action -eq 'navigate'){
  Guard
  $uri=[uri]$q.url
@@ -105,13 +119,13 @@ $d=Document
 if(!$d){throw '未找到日常Chrome网页内容'}
 $url=CurrentUrl
 if($q.action -eq 'snapshot' -and $q.expected_url -and ([uri]$url).GetLeftPart([UriPartial]::Path) -cne ([uri]$q.expected_url).GetLeftPart([UriPartial]::Path)){
- @{url=$url;title='';text='';nodes=@();window=$Window}|ConvertTo-Json -Compress;exit
+ Result @{url=$url;title='';text='';nodes=@()};exit
 }
 if($q.action -ne 'snapshot'){Guard}
 Walk $d 0
 if($q.action -eq 'snapshot'){
  $text=$d.GetCurrentPattern([System.Windows.Automation.TextPattern]::Pattern).DocumentRange.GetText(-1)
- @{url=$url;title=$d.Current.Name;text=$text;nodes=@($script:nodes.ToArray());window=$Window}|ConvertTo-Json -Depth 7 -Compress;exit
+ Result @{url=$url;title=$d.Current.Name;text=$text;nodes=@($script:nodes.ToArray())};exit
 }
 if($q.action -eq 'keys'){Guard;if($q.text -eq '^{HOME}'){$d.SetFocus();Guard};[System.Windows.Forms.SendKeys]::SendWait($q.text);@{key_sent=$true}|ConvertTo-Json -Compress;exit}
 if($q.action -eq 'find'){
