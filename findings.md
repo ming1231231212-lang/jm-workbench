@@ -61,3 +61,7 @@ planning-with-files记录持续计划；brainstorming梳理架构；find-skills�
 - Reddit官方反垃圾内容规则：https://support.reddithelp.com/hc/en-us/articles/360043504051-Spam ，禁止重复或不请自来的大规模互动，明确列举持续推广产品的机器人。1+5不能当作平台许可或安全额度，需核对具体社区与账号权限。
 - 2026-10-04原生Chrome访问Reddit显示Prove your humanity；需要用户本人处理，不能自动绕过。r/SideProject具体规则尚未完整核验。
 - 现有Reddit适配器通过OAuth令牌调用发帖API；浏览器登录不会自动提供已授权令牌，评论与每日计划尚未接入，不能报为自动可用。
+
+## 2026-10-14 日常Chrome窗口与真实回执边界
+
+独立资料目录的备用Chrome不能计入日常Chrome窗口选择。任务绑定窗口、原进程ID与启动时间，每次核验并拒绝句柄复用、非日常资料目录及原标签变化；保留被另用页面，新建本任务核验标签。native模式不依赖扩展/CDP。本人页面回读与手工链接登记仍保持recorded/user_reported，不虚报平台API或未登录公开可见。明日10:00为安排时间，知乎滚动24小时预算首篇约10:15后才可提交；储备不足显示缺口。
