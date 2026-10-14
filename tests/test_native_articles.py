@@ -128,6 +128,22 @@ def test_scope_does_not_match_controls_outside_the_publisher():
     assert inside(s,'submit','panel') and not inside(s,'other','panel')
 
 
+def test_delayed_rich_editor_readback_rechecks_without_pasting_twice():
+    class Delayed(ArticleUI):
+        pastes=0
+        def call(self,action,**kw):
+            result=super().call(action,**kw)
+            if action=='focus-paste':
+                self.pastes+=1
+                return {'value':'clipboard conversion pending'}
+            return result
+    ui=Delayed('tieba');p=NativePublisher(ui,sleep=lambda _:None)
+    payload={'title':'核对AI任务结果','body':'说明：本文使用AI辅助整理。完整保存原始输入、输出和未知项。','platform_tags':[]}
+    prepare_article(p,{'platform':'tieba'},{'name':'fixture'},payload,'ai工具')
+    assert ui.pastes==2 and ui.title==payload['title'] and ui.body==payload['body']
+    assert not ui.overwritten
+
+
 def test_rendered_proof_keeps_negation_and_removes_only_markdown_layout():
     assert rendered('## 标题\n\n- 不要删除原文件')=='标题不要删除原文件'
     assert rendered('不要删除')!=rendered('要删除')

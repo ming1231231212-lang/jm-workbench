@@ -57,6 +57,28 @@ def test_published_zhihu_article_must_match_this_editor_id(tmp_path):
     with pytest.raises(NativeStopped): ui.call('follow_published')
 
 
+def test_owned_submitted_draft_can_follow_observed_article_receipt_only(tmp_path):
+    target='https://juejin.cn/post/1234567890123456'
+    class Result(Channel):
+        def raw(self,action,**kw):
+            value=super().raw(action,**kw)
+            if action=='snapshot':value['nodes']=[{'type':'Hyperlink','visible':True,'name':'核对AI任务结果','value':target+'?from=published'}]
+            return value
+    ui=Result(tmp_path/'tab.json','https://juejin.cn/published')
+    ui.expected=ui.live;ui.state={'key':'owned','url':ui.live,'draft':'original-fingerprint'}
+    with pytest.raises(NativeStopped):ui.open_receipt(target,'different article')
+    assert ui.state['draft']=='original-fingerprint' and not any(a=='navigate' for a,_ in ui.actions)
+    ui.open_receipt(target,'核对AI任务结果')
+    assert ui.live==target and 'draft' not in ui.state
+
+
+def test_result_navigation_cannot_leave_unsent_editor(tmp_path):
+    ui=Channel(tmp_path/'tab.json','https://juejin.cn/editor/drafts/1234567890123456')
+    ui.expected=ui.live;ui.state={'key':'owned','url':ui.live,'draft':'keep'}
+    with pytest.raises(NativeStopped):ui.open_receipt('https://juejin.cn/post/1234567890123456','title')
+    assert ui.state['draft']=='keep' and not any(a=='navigate' for a,_ in ui.actions)
+
+
 def native_runner(monkeypatch, result, returncode=0):
     import jm_workbench.community.native_channel as module
     monkeypatch.setattr(module.os, 'name', 'nt')

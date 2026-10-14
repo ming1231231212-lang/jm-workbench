@@ -65,6 +65,29 @@ class NativeChromeChannel:
     def clear_draft(self):
         self.state.pop('draft',None);self.save()
 
+    def open_receipt(self,url,title):
+        """Follow an observed result link after the single submit, not an editor."""
+        from .registry import thread_url
+        from .native import normalized
+        old,new=urlsplit(self.expected),urlsplit(url)
+        platform={'juejin.cn':'juejin','tieba.baidu.com':'tieba'}.get(old.hostname)
+        expected_path={'juejin':'/published','tieba':'/f'}.get(platform)
+        if not platform or old.path!=expected_path or new.hostname!=old.hostname or thread_url(platform,url)!=url:
+            raise NativeStopped('回执导航不属于当前平台结果页，未离开原稿')
+        s=self.call('snapshot')
+        observed=[]
+        for n in s.get('nodes',[]):
+            if not n.get('visible') or n.get('type')!='Hyperlink' or normalized(title) not in normalized(n.get('name','')):continue
+            try:observed.append(thread_url(platform,n.get('value','')))
+            except ValueError:continue
+        if url not in observed:
+            raise NativeStopped('结果链接未在当前页面核对，未离开原稿')
+        draft=self.state.pop('draft',None)
+        try:return self.call('open',url=url)
+        except Exception:
+            if draft:self.state['draft']=draft;self.save()
+            raise
+
     def resume_article(self,payload):
         if self.state.get('draft')!=self.fingerprint(payload):return None
         try:self.raw('select',key=self.state['key'])

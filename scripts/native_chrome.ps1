@@ -210,6 +210,15 @@ if($q.action -in @('focus-copy','focus-paste','focus-clear')){
  @{value=$copied;html=$html;action=$q.action}|ConvertTo-Json -Compress;exit
 }
 if(!$e -or $e.Current.IsOffscreen -or !$e.Current.IsEnabled){throw '目标控件消失、不可见或不可用，未操作'}
+if($q.action -eq 'click' -and $e.Current.ControlType -eq [System.Windows.Automation.ControlType]::Button){
+ $invoke=$null
+ if($e.TryGetCurrentPattern([System.Windows.Automation.InvokePattern]::Pattern,[ref]$invoke)){
+  # Invoke the exact verified webpage button once. Floating desktop windows do
+  # not receive coordinates or keys; an invoke failure must never fall back.
+  Guard;$invoke.Invoke()
+  @{action=$q.action;completed=$true;input_method='native_invoke'}|ConvertTo-Json -Compress;exit
+ }
+}
 $r=$e.Current.BoundingRectangle
 $point=$null
 # A floating meeting window can cover the centre while the same control has

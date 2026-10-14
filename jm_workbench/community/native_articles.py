@@ -144,6 +144,11 @@ def paste(p, node, url, text):
     p._snapshot(url)
     copied = p.ui.call('focus-paste', key=node['key'], expected_url=url, text=text)
     value = semantic_value(p.ui.call('follow_editor'), node['key'], copied['value'],copied.get('html',''))
+    # Clipboard reads may precede the browser's rich-link conversion. Re-read
+    # the same editor only; never paste the body again or accept a partial match.
+    for _ in range(3):
+        if normalized(value)==normalized(text):break
+        p.sleep(.5);value=copy(p,node,url)
     if normalized(value) != normalized(text): raise NativeStopped('原生文章全文回读不一致，未提交')
 
 
@@ -354,7 +359,9 @@ def verify_article(p, account, binding, payload):
                     except ValueError:pass
                 links = list(dict.fromkeys(links))
                 if len(links) != 1:continue
-                p.ui.call('open',url=links[0]);s = p._wait_page(links[0]);url = links[0]
+                if hasattr(p.ui,'open_receipt'):p.ui.open_receipt(links[0],payload['title'])
+                else:p.ui.call('open',url=links[0])
+                s = p._wait_page(links[0]);url = links[0]
             text = rendered(s['text'])
             docs=[n for n in s['nodes'] if n['type']=='Document']
             semantic=rendered(semantic_value(s,docs[0]['key'],s['text'],strict=False)) if len(docs)==1 else text
