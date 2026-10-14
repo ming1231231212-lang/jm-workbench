@@ -6,7 +6,39 @@ $q=[Console]::In.ReadToEnd() | ConvertFrom-Json
 Add-Type -AssemblyName UIAutomationClient
 Add-Type -AssemblyName UIAutomationTypes
 Add-Type -AssemblyName System.Windows.Forms
-Add-Type 'using System.Runtime.InteropServices; public static class JmClipboard { [DllImport("user32.dll")] public static extern uint GetClipboardSequenceNumber(); }'
+Add-Type @'
+using System;
+using System.Runtime.InteropServices;
+using System.Text;
+public static class JmClipboard {
+ [DllImport("user32.dll")] public static extern uint GetClipboardSequenceNumber();
+ [DllImport("user32.dll")] static extern bool OpenClipboard(IntPtr owner);
+ [DllImport("user32.dll")] static extern bool CloseClipboard();
+ [DllImport("user32.dll", CharSet=CharSet.Unicode)] static extern uint RegisterClipboardFormat(string format);
+ [DllImport("user32.dll")] static extern IntPtr GetClipboardData(uint format);
+ [DllImport("kernel32.dll")] static extern IntPtr GlobalLock(IntPtr handle);
+ [DllImport("kernel32.dll")] static extern bool GlobalUnlock(IntPtr handle);
+ [DllImport("kernel32.dll")] static extern UIntPtr GlobalSize(IntPtr handle);
+ public static string ReadHtml() {
+  // CF_HTML is UTF-8. Windows PowerShell's older WinForms decoder uses the
+  // system ANSI code page, which corrupts Chinese and even HTML delimiters.
+  if(!OpenClipboard(IntPtr.Zero)) throw new InvalidOperationException("Clipboard is busy");
+  try {
+   var handle=GetClipboardData(RegisterClipboardFormat("HTML Format"));
+   if(handle==IntPtr.Zero) return "";
+   ulong length=GlobalSize(handle).ToUInt64();
+   if(length==0 || length>4*1024*1024) throw new InvalidOperationException("Unexpected HTML clipboard size");
+   var pointer=GlobalLock(handle);
+   if(pointer==IntPtr.Zero) throw new InvalidOperationException("Cannot read HTML clipboard");
+   try {
+    var bytes=new byte[(int)length];Marshal.Copy(pointer,bytes,0,bytes.Length);
+    int end=Array.IndexOf(bytes,(byte)0);if(end<0)end=bytes.Length;
+    return new UTF8Encoding(false,true).GetString(bytes,0,end);
+   } finally { GlobalUnlock(handle); }
+  } finally { CloseClipboard(); }
+ }
+}
+'@
 Add-Type 'using System; using System.Runtime.InteropServices; public static class JmNativeChrome { [DllImport("user32.dll")] public static extern bool SetForegroundWindow(IntPtr h); [DllImport("user32.dll")] public static extern IntPtr GetForegroundWindow(); [DllImport("user32.dll")] public static extern bool SetCursorPos(int x,int y); [DllImport("user32.dll")] public static extern void mouse_event(uint f,uint x,uint y,uint d,UIntPtr e); [DllImport("user32.dll")] public static extern IntPtr WindowFromPoint(Point p); [DllImport("user32.dll")] public static extern IntPtr GetAncestor(IntPtr h,uint f); [DllImport("user32.dll")] public static extern uint GetWindowThreadProcessId(IntPtr h,out uint p); [DllImport("kernel32.dll")] public static extern uint GetCurrentThreadId(); [DllImport("user32.dll")] public static extern bool AttachThreadInput(uint a,uint b,bool attach); [DllImport("user32.dll")] public static extern bool BringWindowToTop(IntPtr h); [DllImport("user32.dll")] public static extern bool IsIconic(IntPtr h); [DllImport("user32.dll")] public static extern bool ShowWindow(IntPtr h,int command); [StructLayout(LayoutKind.Sequential)] public struct Point { public int x; public int y; } public static bool Activate(IntPtr h) { if(IsIconic(h)) ShowWindow(h,9); if(GetForegroundWindow()==h) return true; if(SetForegroundWindow(h) && GetForegroundWindow()==h) return true; var f=GetForegroundWindow(); if(f==IntPtr.Zero) return false; uint p; uint foreground=GetWindowThreadProcessId(f,out p), current=GetCurrentThreadId(); bool joined=foreground!=current && AttachThreadInput(current,foreground,true); try { BringWindowToTop(h); SetForegroundWindow(h); return GetForegroundWindow()==h; } finally { if(joined) AttachThreadInput(current,foreground,false); } } }'
 if(!$Window){
  $processes=@(Get-Process chrome -ErrorAction SilentlyContinue | Where-Object {$_.MainWindowHandle -ne 0} | Where-Object {
@@ -211,7 +243,7 @@ if($q.action -in @('focus-copy','focus-paste','focus-clear')){
  $copied='';$html=''
  if($freshCopy){
   $copied=[System.Windows.Forms.Clipboard]::GetText()
-  $html=[System.Windows.Forms.Clipboard]::GetText([System.Windows.Forms.TextDataFormat]::Html)
+  $html=[JmClipboard]::ReadHtml()
  }else{
   $editorText=$e.GetCurrentPattern([System.Windows.Automation.TextPattern]::Pattern).DocumentRange.GetText(-1)
   if(![string]::IsNullOrWhiteSpace($editorText)){throw '原生复制尚未完成，保留现有正文，未提交'}
