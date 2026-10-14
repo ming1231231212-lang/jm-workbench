@@ -19,7 +19,7 @@ class NativeUnknown(RuntimeError):
 
 
 def normalized(value):
-    return re.sub(r'[\s\u200b\ufffc]', '', value or '')
+    return re.sub(r'[\s\u200b\ufeff\ufffc]', '', value or '')
 
 
 def _path(value):
@@ -27,10 +27,22 @@ def _path(value):
     return u.scheme + '://' + u.netloc + u.path.rstrip('/')
 
 
+def profile_key(value):
+    u = urlsplit(value)
+    if u.hostname=='juejin.cn':
+        match=re.fullmatch(r'/user/([1-9][0-9]{5,23})(?:/(?:posts|followers))?/?',u.path)
+        if match:return 'juejin:'+match[1]
+    if u.hostname == 'tieba.baidu.com' and u.path == '/home/main':
+        ids = parse_qs(u.query).get('id', [])
+        return 'tieba:' + ids[0] if len(ids) == 1 else ''
+    return _path(value)
+
+
 class NativePublisher:
-    def __init__(self, ui, sleep=time.sleep, poll_attempts=12, before_submit=lambda: None):
+    def __init__(self, ui, sleep=time.sleep, poll_attempts=12, before_submit=lambda: None, identity_ui=None):
         self.ui, self.sleep, self.poll_attempts = ui, sleep, poll_attempts
         self.before_submit = before_submit
+        self.identity_ui=identity_ui
 
     def _snapshot(self, url):
         s = self.ui.call('snapshot')
@@ -63,6 +75,8 @@ class NativePublisher:
         self.ui.call('click', key=node['key'], expected_url=url)
 
     def check(self, account, binding):
+        if self.identity_ui is not None:
+            return NativePublisher(self.identity_ui,sleep=self.sleep,poll_attempts=self.poll_attempts).check(account,binding)
         p = account.get('platform')
         if p not in ('zhihu', 'tieba', 'juejin') or not account.get('enabled'):
             raise NativeStopped('此账号未启用本机身份检查')
@@ -90,11 +104,27 @@ class NativePublisher:
         return identity
 
     def publish(self, account, binding, payload, target):
-        if account.get('platform') != 'zhihu':
-            raise NativeStopped('此平台本机提交尚未验收，未提交')
         self.check(account, binding)
         if payload.get('kind') != 'reply':
-            raise NativeStopped('本机文章定时提交尚未验收，未提交')
+            from .native_articles import prepare_article, verify_article
+            ready = prepare_article(self, account, binding, payload, target)
+            self.before_submit()
+            try:
+                self._click(ready['submit'], ready['url'])
+                receipt=verify_article(self, account, binding, payload)
+                if hasattr(self.ui,'clear_draft'):self.ui.clear_draft()
+                return receipt
+            except Exception as exc:
+                raise NativeUnknown('文章已进入单次提交边界，结果不明；禁止自动重发') from exc
+        if account.get('platform') != 'zhihu':
+            from .native_replies import prepare_reply,verify_reply
+            ready=prepare_reply(self,account,binding,payload,target)
+            self.before_submit()
+            try:
+                self._click(ready['submit'],ready['url'])
+                return verify_reply(self,account,binding,payload,ready)
+            except Exception as exc:
+                raise NativeUnknown('评论已进入单次提交边界，结果不明；禁止自动重发') from exc
         target = comment_target_url(target)
         body = payload.get('body', '').strip()
         if len(body) < 20 or len(body) > 2000 or not payload.get('source_title'):
@@ -104,7 +134,7 @@ class NativePublisher:
         original = normalized(s['text'])
         title = normalized(payload['source_title'])
         anchors = [normalized(line) for line in payload.get('source_excerpt', '').splitlines()
-                   if len(normalized(line)) >= 20]
+                   if len(normalized(line)) >= 20 and normalized(line)!=title]
         if title not in original or not anchors or not any(a in original for a in anchors):
             raise NativeStopped('原帖标题或具体正文不一致，未提交')
         if not self._nodes(s, 'Button', '点击打开' + binding['name'] + '的主页'):
@@ -148,7 +178,7 @@ class NativePublisher:
                     urls = {_path(binding['profile_url']), *(_path(u) for u in binding.get('profile_aliases', []))}
                     own = next((n.get('value') for n in around if n.get('type') == 'Hyperlink' and _path(n.get('value', '')) in urls), None)
                     if own:
-                        return {'url': target, 'visibility': 'account_visible', 'body': body,
+                        return {'url': target, 'post_id':target.rsplit('/',1)[-1], 'visibility': 'account_visible', 'body': body,
                                 'author_url': own, 'author_name': binding['name']}
             except Exception:
                 pass

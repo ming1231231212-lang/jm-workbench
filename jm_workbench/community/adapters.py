@@ -266,6 +266,9 @@ class CommunityAdapter:
         return {'api-key':secret} if account['platform']=='dev' else {'Authorization':'Bearer '+secret}
 
     def check(self, account, secret):
+        if self.config.values.get('community_browser_execution')=='native' and account['platform'] in ('tieba','juejin','zhihu'):
+            from .native_runtime import NativeRuntime
+            return NativeRuntime(self.config).check(account)
         self.require_browser_execution(account)
         p=account['platform']
         if p=='csdn':
@@ -287,6 +290,8 @@ class CommunityAdapter:
 
     def discover(self,account,boards):
         """Read a bounded set of recent public threads; never click interaction buttons."""
+        if self.config.values.get('community_browser_execution')=='native':
+            raise PreflightStopped('本机发布请先补充已核对原文的指定帖评论；不会退回旧浏览器连接')
         self.require_browser_execution(account)
         if account['platform']=='csdn':
             from .csdn import CsdnBrowser
@@ -330,6 +335,9 @@ class CommunityAdapter:
             return result
 
     def publish(self, account, secret, payload, target):
+        if self.config.values.get('community_browser_execution')=='native' and account['platform'] in ('tieba','juejin','zhihu'):
+            from .native_runtime import NativeRuntime
+            return NativeRuntime(self.config).publish(account,payload,target)
         self.require_browser_execution(account)
         p=account['platform']
         if p=='csdn':
@@ -384,6 +392,7 @@ class CommunityAdapter:
 
     def ensure_connection(self, account):
         """Restore only the bound local profile, never a different account/IP."""
+        if self.config.values.get('community_browser_execution')=='native':return
         self.require_browser_execution(account)
         if account['platform'] not in ('tieba','juejin','csdn'):return
         if uses_relay(self.config,account):

@@ -54,6 +54,14 @@ def platform(ident):
 def publication_platform(config, ident):
     """Runtime availability is separate from installed adapter capabilities."""
     p=platform(ident)
+    if config.values.get('community_browser_execution')=='native' and ident in ('tieba','juejin','zhihu'):
+        return {**p,'automatic':True,'mode':'native','mode_label':'本机Chrome发布 · 需核验账号',
+                'note':'使用日常Chrome与本人主页核验。需要电脑保持唤醒且桌面可交互；遇到验证或结果不明停止，不会自动重发。',
+                'verification':'原生页面逐项核对与隔离模拟测试；公开可见性另行核验',
+                'capabilities':{**p['capabilities'],'auto_publish':True,'auto_comment':True,'daily_plan':True}}
+    if config.values.get('community_browser_execution')=='native' and p['mode']=='browser':
+        return {**p,'automatic':False,'mode':'web','mode_label':'网页发布',
+                'capabilities':{**p['capabilities'],'auto_publish':False,'auto_comment':False,'daily_plan':False}}
     if p['mode']!='browser' or config.values.get('community_browser_execution')!='web':return p
     return {**p,'automatic':False,'mode':'web','mode_label':'网页发布 · 自动控制已停用',
             'note':'浏览器扩展已取消。复制或导出正文，在日常 Chrome 提交，再登记链接；自动发帖、评论和每日计划已停用。',

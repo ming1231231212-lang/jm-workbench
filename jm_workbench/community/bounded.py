@@ -88,11 +88,12 @@ class BoundedCommunityAdapter:
         self.local = CommunityAdapter(config)
         self.boundary = boundary or ProcessBoundary(config.home)
         self.operation_lock=threading.Lock()
+        self.limits={**LIMITS,**({'check':120,'publish':420} if config.values.get('community_browser_execution')=='native' else {})}
 
     def _call(self, action, *args):
         if not self.operation_lock.acquire(blocking=False):
             raise RetryablePreflight('浏览器正在处理其他操作，当前动作未提交；请稍后检查')
-        try: return self.boundary.call(action, args, LIMITS[action])
+        try: return self.boundary.call(action, args, self.limits[action])
         except TimeoutError:
             if action == 'publish': raise
             raise RetryablePreflight(LABELS[action]+'超时，未提交；稍后会重新检查连接') from None

@@ -63,6 +63,8 @@ class Community:
         value={**json.loads(row['data']),'id':row['id'],'version':row['version'],'identity':row['identity'],
                'checked':row['checked'],'secret_configured':bool(row['credential'])}
         value['automatic_execution']=publication_platform(self.cfg.config,value['platform'])['automatic']
+        if self.cfg.config.values.get('community_browser_execution')=='native' and value['platform'] in ('tieba','juejin','zhihu'):
+            value['automatic_execution']=bool(value.get('native_binding'))
         if private:
             value['profile_dir']=str(self.cfg.config.home/'community-profiles'/ident)
             value['_secret']=unseal(row['credential'])
@@ -83,6 +85,7 @@ class Community:
             if old and json.loads(old['data'])['platform']!=data['platform']:
                 raise ValueError('已有账号不能更换平台，请另建账号')
             if old:
+                if json.loads(old['data']).get('native_binding'):data['native_binding']=json.loads(old['data'])['native_binding']
                 db.execute("UPDATE community_accounts SET data=?,credential=?,version=version+1,identity='',checked=0 WHERE id=?",(dumps(data),encrypted or old['credential'],ident))
             else:
                 db.execute('INSERT INTO community_accounts(id,data,credential) VALUES(?,?,?)',(ident,dumps(data),encrypted))
@@ -128,9 +131,43 @@ class Community:
             db.execute('INSERT OR IGNORE INTO community_claims SELECT platform,?,scope,value,job_id,created FROM community_claims WHERE platform=? AND identity=?',(identity,a['platform'],'manual:'+ident))
         return {'message':'账号身份已核验；发帖权限会在实际提交时由平台校验','account':self.account(ident)}
 
+    def bind_native(self,ident,payload):
+        a=self.account(ident,True)
+        if self.cfg.config.values.get('community_browser_execution')!='native' or a['platform'] not in ('tieba','juejin','zhihu'):
+            raise ValueError('此平台尚未启用本机发布')
+        if a['version']!=payload.version or (a['identity'] and a['identity']!=payload.identity):
+            raise ValueError('账号配置或原身份不一致，不能替换原账号')
+        if a.get('native_binding'):
+            from .native import profile_key
+            if profile_key(a['native_binding']['profile_url'])!=profile_key(payload.profile_url):
+                raise ValueError('已有本人主页不能替换为其他账号，请另建账号')
+        if not a['identity']:
+            from urllib.parse import urlsplit,parse_qs
+            url=urlsplit(payload.profile_url)
+            expected=('zhihu:'+url.path.rsplit('/',1)[-1] if a['platform']=='zhihu' else
+                      'tieba:'+parse_qs(url.query).get('id',[''])[0] if a['platform']=='tieba' else url.path.rsplit('/',1)[-1])
+            if payload.identity!=expected:raise ValueError('新账号标识需与实际本人主页一致')
+        if a['platform']=='zhihu' and payload.identity!='zhihu:'+payload.profile_url.rstrip('/').rsplit('/',1)[-1]:
+            raise ValueError('知乎账号标识与本人主页不一致')
+        binding=payload.model_dump(exclude={'version'});probe={**a,'native_binding':binding}
+        actual=self.adapter.check(probe,a['_secret'])
+        if actual!=payload.identity:raise IdentityChanged('本人主页身份核验不一致')
+        with self.store.connect(True) as db:
+            current=db.execute('SELECT * FROM community_accounts WHERE id=?',(ident,)).fetchone()
+            if not current or current['version']!=payload.version or current['identity']!=a['identity']:
+                raise ValueError('核验期间账号配置改变，未保存')
+            if db.execute("SELECT 1 FROM community_jobs WHERE account_id=? AND state IN ('running','unknown')",(ident,)).fetchone():
+                raise ValueError('账号有执行中或结果不明任务，请先核验原任务')
+            data=json.loads(current['data']);data['native_binding']=binding
+            db.execute('UPDATE community_accounts SET data=?,version=version+1,identity=?,checked=? WHERE id=?',(dumps(data),actual,self.clock(),ident))
+            db.execute("UPDATE community_jobs SET state='paused',message='本人主页配置更新，请重新核对原任务' WHERE account_id=? AND state='queued'",(ident,))
+            db.execute("UPDATE community_plans SET state='paused',message='本人主页配置更新，请重新启用计划' WHERE json_extract(payload,'$.account_id')=?",(ident,))
+            db.execute('INSERT OR IGNORE INTO community_claims SELECT platform,?,scope,value,job_id,created FROM community_claims WHERE platform=? AND identity=?',(actual,a['platform'],'manual:'+ident))
+        return {'message':'本人主页已核验，原记录保留；请检查计划后启用','account':self.account(ident)}
+
     def sync_account(self,ident):
         a=self.account(ident)
-        if a['platform'] not in ('tieba','juejin','csdn') or not a['enabled']:
+        if a['platform'] not in ('tieba','juejin','csdn','zhihu') or not a['enabled']:
             raise ValueError('自动同步仅适用于已启用的贴吧、掘金或CSDN浏览器账号')
         try:return {'status':'verified',**self.check_account(ident)}
         except ValueError as ex:return {'status':'pending','message':str(ex)}
@@ -410,11 +447,11 @@ class Community:
             if not raw or raw['version']!=s['account']['version'] or not json.loads(raw['data'])['enabled'] or s['revision']!=self.cfg.code_revision:
                 db.execute("UPDATE community_jobs SET state='paused',message='配置或代码版本已改变，请新建草稿' WHERE id=?",(job['id'],));return
             recent=list(db.execute("SELECT CASE WHEN started>0 THEN started WHEN state='recorded' THEN updated ELSE 0 END AS started FROM community_jobs WHERE platform=? AND (CASE WHEN started>0 THEN started WHEN state='recorded' THEN updated ELSE 0 END)>? ORDER BY started DESC",(p,now-86400)))
-            limit=6 if p in ('tieba','juejin','csdn') else 5
+            limit=6 if p in ('tieba','juejin','csdn','zhihu') else 5
             due=max((recent[0]['started']+1800 if recent else now),(recent[limit-1]['started']+86400 if len(recent)>=limit else now))
             wait_reason='30分钟发布间隔'
             if len(recent)>=limit and recent[limit-1]['started']+86400>now:wait_reason='滚动24小时共享额度'
-            if p in ('tieba','juejin','csdn'):
+            if p in ('tieba','juejin','csdn','zhihu'):
                 midnight=datetime.fromtimestamp(now,SHANGHAI).replace(hour=0,minute=0,second=0,microsecond=0)
                 today=list(db.execute("SELECT snapshot FROM community_jobs WHERE platform=? AND (started>=? OR (state='recorded' AND updated>=?))",(p,midnight.timestamp(),midnight.timestamp())))
                 kind=s['payload'].get('kind','thread')
@@ -445,10 +482,11 @@ class Community:
             if current['message'] in ('stop_requested','cancel_requested'):raise InterruptedError(current['message'])
             with self.store.connect(True) as db:
                 db.execute("UPDATE community_jobs SET message='正在提交并等待平台回执（最长3分钟）',updated=? WHERE id=?",(self.clock(),job['id']))
+            a['_native_job_id']=job['id']
             receipt=self.adapter.publish(a,a['_secret'],s['payload'],s['destination'])
             if not receipt.get('post_id') or not receipt.get('url'):raise RuntimeError('missing receipt')
             safe_post_url(p,receipt['url'])
-            status,message='submitted','平台已接收 · 公开可见性未核验'
+            status,message='submitted',('本人页面已核实正文与作者 · 公开可见性未核验' if receipt.get('visibility')=='account_visible' else '平台已接收 · 公开可见性未核验')
         except InterruptedError as ex:
             status,message=('cancelled' if str(ex)=='cancel_requested' else 'paused'),'用户已停止，未提交'
         except RetryablePreflight as ex:

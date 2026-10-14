@@ -1,6 +1,8 @@
 """Windows UI Automation channel bound to one task-owned everyday Chrome tab."""
 import json
+import hashlib
 import os
+import re
 import shutil
 import subprocess
 from pathlib import Path
@@ -17,6 +19,7 @@ class NativeChromeChannel:
         self.expected = ''
         self.redirects = []
         self.state = json.loads(self.path.read_text(encoding='utf-8')) if self.path.exists() else {}
+        self.expected=self.state.get('url','')
         self.shell = shutil.which('pwsh') or shutil.which('powershell')
 
     def raw(self, action, **kwargs):
@@ -24,7 +27,7 @@ class NativeChromeChannel:
             raise NativeStopped('本机Chrome操作需要Windows可交互桌面')
         try:
             p = self.runner([self.shell, '-NoProfile', '-STA', '-File', str(ROOT / 'scripts/native_chrome.ps1')],
-                input=json.dumps({'action': action, **kwargs}, ensure_ascii=False),
+                input=json.dumps({'action': action, **({'tab_key':self.state['key']} if self.state.get('key') and action not in ('new','tabs','select') else {}), **kwargs}, ensure_ascii=False),
                 capture_output=True, encoding='utf-8', timeout=25,
                 creationflags=subprocess.CREATE_NO_WINDOW, cwd=ROOT)
         except subprocess.TimeoutExpired as ex:
@@ -38,6 +41,22 @@ class NativeChromeChannel:
         temp = self.path.with_suffix('.tmp')
         temp.write_text(json.dumps(self.state, ensure_ascii=False), encoding='utf-8')
         temp.replace(self.path)
+
+    @staticmethod
+    def fingerprint(payload):
+        return hashlib.sha256(json.dumps([payload['title'],payload['body']],ensure_ascii=False).encode()).hexdigest()
+
+    def mark_draft(self,payload):
+        self.state['draft']=self.fingerprint(payload);self.save()
+
+    def clear_draft(self):
+        self.state.pop('draft',None);self.save()
+
+    def resume_article(self,payload):
+        if self.state.get('draft')!=self.fingerprint(payload):return None
+        self.raw('select',key=self.state['key'])
+        self.expected=self.state['url']
+        return self.call('follow_editor')
 
     def adopt(self, title_prefix, expected_url):
         """Only for the already-created task tab; requires an explicit exact URL."""
@@ -53,6 +72,22 @@ class NativeChromeChannel:
         self.expected = s['url']; self.save()
 
     def call(self, action, **kwargs):
+        if action in ('follow_editor', 'follow_published'):
+            value = self.raw('url')['url']
+            old, new = urlsplit(self.expected), urlsplit(value)
+            valid = value == self.expected
+            if action == 'follow_editor':
+                valid = valid or (old.hostname == new.hostname == 'zhuanlan.zhihu.com' and old.path == '/write' and re.fullmatch(r'/p/[1-9][0-9]{3,23}/edit', new.path))
+                valid = valid or (old.hostname == new.hostname == 'juejin.cn' and old.path == '/editor/drafts/new' and re.fullmatch(r'/editor/drafts/[1-9][0-9]{3,23}', new.path))
+            elif action == 'follow_published':
+                valid = valid or (old.hostname == new.hostname == 'zhuanlan.zhihu.com' and re.fullmatch(r'/p/[1-9][0-9]{3,23}/edit', old.path) and new.path == old.path.removesuffix('/edit'))
+                valid = valid or (old.hostname == new.hostname == 'juejin.cn' and old.path.startswith('/editor/drafts/') and re.fullmatch(r'/post/[1-9][0-9]{15,23}', new.path))
+                valid = valid or (old.hostname == new.hostname == 'juejin.cn' and old.path.startswith('/editor/drafts/') and new.path == '/published')
+                valid = valid or (old.hostname == new.hostname == 'tieba.baidu.com' and old.path == '/f' and re.fullmatch(r'/p/[1-9][0-9]{3,23}', new.path))
+            if not valid:
+                raise NativeStopped('页面没有按预期进入本次编辑或结果页，未接管其他页面')
+            self.expected = value; self.state['url'] = value; self.save()
+            return self.raw('snapshot', expected_url=value)
         if action != 'open':
             if action == 'snapshot':
                 kwargs['expected_url'] = self.expected
@@ -69,12 +104,23 @@ class NativeChromeChannel:
             if u.scheme != 'https' or u.hostname != 'www.zhihu.com' or not u.path.startswith('/people/') or u.query or u.fragment or u.username or u.port:
                 raise NativeStopped('主页跳转不在已绑定的账号范围')
         if not self.state:
-            raise NativeStopped('本次发布没有已核对的任务专用标签，未改动其他页面')
+            self.raw('new')
+            tabs = [t for t in self.raw('tabs')['tabs'] if t.get('selected')]
+            if len(tabs) != 1: raise NativeStopped('新建任务标签无法唯一核对，未导航')
+            self.state = {'key': tabs[0]['key'], 'url': '', 'new': True}; self.save()
+            self.state = {'key': tabs[0]['key'], 'url': self.raw('url')['url']}
+            self.save()
         self.raw('select', key=self.state['key'])
-        s = self.raw('snapshot', expected_url=self.state['url'])
-        if not s.get('text'):
+        actual = self.raw('url')['url']
+        if actual != self.state['url']:
+            self.expected=self.state['url']
+            self.call('follow_editor')
+            actual=self.state['url']
+        if self.state.get('draft') and url!=actual:
+            raise NativeStopped('本任务有未提交文章，已保留原稿，未导航')
+        if actual != self.state['url']:
             raise NativeStopped('本任务标签已被用于其他页面，未覆盖')
-        self.raw('navigate', expected_url=s['url'], url=url)
+        self.raw('navigate', expected_url=actual, url=url)
         self.redirects = redirects
         self.state['url'] = url; self.expected = url; self.save()
         return {'url': url}

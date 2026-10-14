@@ -20,6 +20,15 @@ class CommunityAccount(BaseModel):
         return value
 
 
+class NativeBindInput(BaseModel):
+    model_config=ConfigDict(extra='forbid',str_strip_whitespace=True)
+    version:int=Field(ge=1)
+    identity:str=Field(min_length=1,max_length=100)
+    name:str=Field(min_length=1,max_length=60)
+    profile_url:str=Field(min_length=10,max_length=1000)
+    profile_aliases:list[str]=Field(default_factory=list,max_length=3)
+
+
 class Target(BaseModel):
     model_config = ConfigDict(extra='forbid',str_strip_whitespace=True)
     account_id: str = Field(min_length=1,max_length=64,pattern=r'^[A-Za-z0-9_-]+$')
@@ -112,7 +121,7 @@ class ReplyMaterial(BaseModel):
     def valid_url(cls,value):
         from .registry import thread_url
         from urllib.parse import urlparse
-        return thread_url({'juejin.cn':'juejin','blog.csdn.net':'csdn'}.get(urlparse(value).hostname,'tieba'),value)
+        return thread_url({'juejin.cn':'juejin','blog.csdn.net':'csdn','www.zhihu.com':'zhihu','zhuanlan.zhihu.com':'zhihu'}.get(urlparse(value).hostname,'tieba'),value)
 
 
 class ReplyRule(BaseModel):
@@ -141,7 +150,8 @@ class DailyPlan(BaseModel):
     model_config=ConfigDict(extra='forbid',str_strip_whitespace=True)
     name: str = Field(min_length=1,max_length=60)
     account_id: str = Field(min_length=1,max_length=64)
-    board: str = Field(min_length=1,max_length=50)
+    board: str = Field(default='',max_length=50)
+    start_date: date | None = None
     rules_note: str = Field(min_length=12,max_length=1000)
     hour: int = Field(default=10,ge=0,le=20)
     minute: int = Field(default=0,ge=0,le=59)
@@ -155,7 +165,7 @@ class DailyPlan(BaseModel):
     @classmethod
     def valid_board(cls,value):
         from .registry import destination
-        return destination('tieba',value)
+        return destination('tieba',value) if value else ''
 
     @field_validator('source_boards')
     @classmethod

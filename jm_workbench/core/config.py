@@ -12,6 +12,9 @@ def revision():
         if path.suffix in ('.py', '.js', '.css', '.html'):
             digest.update(path.relative_to(ROOT).as_posix().encode())
             digest.update(path.read_bytes())
+    native=ROOT/'scripts/native_chrome.ps1'
+    if native.is_file():
+        digest.update(b'scripts/native_chrome.ps1');digest.update(native.read_bytes())
     return digest.hexdigest()[:16]
 
 

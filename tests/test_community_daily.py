@@ -105,3 +105,15 @@ def test_discovery_requires_relevant_original_context(ctx):
 
 def test_ordinary_auto_reply_rule_cannot_inject_promotional_link():
     with pytest.raises(ValueError):ReplyRule(name='promote',terms=['AI'],body='请访问我这个平台了解所有功能，可以在这里得到帮助 https://example.com',require_question=False)
+
+
+def test_future_start_date_cannot_be_overridden_by_arrange_today(ctx):
+    s,_,a,n=ctx;n[0]=datetime(2026,10,14,12,0,tzinfo=SHANGHAI).timestamp()
+    d=config(a);d.start_date=datetime(2026,10,15).date()
+    p=s.daily.save(d)["id"];s.daily.control(p,"enable")
+    s.daily.prepare(p,force=True);s.tick()
+    assert not s.state()["posts"]
+    state=s.daily.state()[0]
+    assert state["next_action_at"]==datetime(2026,10,15,10,0,tzinfo=SHANGHAI).timestamp()
+    n[0]=datetime(2026,10,15,10,0,tzinfo=SHANGHAI).timestamp();s.daily.prepare(p)
+    assert len(s.state()["posts"])==6

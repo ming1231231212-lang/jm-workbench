@@ -51,3 +51,11 @@ test('viewing Zhihu account does not probe extensions or automatic execution', a
   await ui.load();await ui.load();
   assert.deepEqual(calls,['/api/community/state','/api/community/state']);
 });
+
+
+test('native account records render homepage binding without launching a check', () => {
+  const native={...zhihu,mode:'native',automatic:true,mode_label:'本机Chrome发布',capabilities:{...zhihu.capabilities,auto_comment:true,daily_plan:true}};
+  assert.equal(commentWorkflow(native),'评论：自动发布；每日计划：需账号权限');
+  const html=accountsView({...data,platforms:[native],accounts:[{...data.accounts[0],native_binding:{profile_url:'https://www.zhihu.com/people/fixture'},identity:'zhihu:fixture',checked:1}]},{accountMode:'matrix',platform:'',q:''});
+  assert.ok(html.includes('本机Chrome发布'));assert.ok(html.includes('评论：自动发布'));
+});

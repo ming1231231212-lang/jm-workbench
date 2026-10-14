@@ -141,3 +141,10 @@ def test_verified_alias_may_redirect_to_the_exact_bound_primary_profile():
             return value
     ui = Redirect(); ui.author = ALIAS
     assert publisher(ui).publish(ACCOUNT, {**BINDING, 'profile_aliases': [ALIAS]}, PAYLOAD, URL)['author_url'] == ALIAS
+
+
+def test_a_long_title_is_not_accepted_as_the_only_body_evidence():
+    ui=FakeDesktop()
+    bad={**PAYLOAD,"source_title":"这是一个足够长但只来自标题没有具体正文依据的测试题目","source_excerpt":"这是一个足够长但只来自标题没有具体正文依据的测试题目"}
+    with pytest.raises(NativeStopped):publisher(ui).publish(ACCOUNT,BINDING,bad,URL)
+    assert ui.writes==0

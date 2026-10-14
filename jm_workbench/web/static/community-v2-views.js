@@ -247,7 +247,7 @@ export function drawer(data, u) {
               `<div class="mini-item">${small(p.payload.name, "com-v2-plan", p.id)}${badge(planStatus(p, data))}</div>`,
           )
           .join("") || '<p class="form-note">还没有关联计划。</p>',
-      )}<div class="login-steps" ${!p.automatic?"hidden":""}><div class="login-step"><div>打开平台网站<small>默认使用日常 Chrome，沿用平常的登录状态。</small></div></div><div class="login-step"><div>返回工作台检查执行连接<small>核验原绑定执行账号；日常网页登录不会自动建立执行连接。</small></div></div><div class="login-step"><div>回到计划启用<small>平台暂停和未知结果需单独处理。</small></div></div></div></div><div class="drawer-footer"><p>账号与历史结果独立保存</p><div>${small("删除", "com-delete-account", id, "quiet")}${small("编辑", "com-edit-account", id)}${p.automatic ? small("检查执行连接", "com-check", id) : ""}${small("打开网站", "com-open-account", id, "primary")}</div></div>`
+      )}<div class="login-steps" ${!p.automatic?"hidden":""}><div class="login-step"><div>打开平台网站<small>默认使用日常 Chrome，沿用平常的登录状态。</small></div></div><div class="login-step"><div>返回工作台检查执行连接<small>核验本人主页与日常Chrome账号；需要电脑唤醒且桌面可交互。</small></div></div><div class="login-step"><div>回到计划启用<small>平台暂停和未知结果需单独处理。</small></div></div></div></div><div class="drawer-footer"><p>账号与历史结果独立保存</p><div>${small("删除", "com-delete-account", id, "quiet")}${small("编辑", "com-edit-account", id)}${p.mode === "native" ? small("核验本人主页", "com-bind-native", id) : ""}${p.automatic ? small("检查执行连接", "com-check", id) : ""}${small("打开网站", "com-open-account", id, "primary")}</div></div>`
     );
   }
   return null;

@@ -220,7 +220,7 @@ export class CommunityWorkspace extends CommunityUI {
     const p = this.data.plans.find((p) => p.id === id);
     if (p?.state === "enabled") throw Error("请先暂停计划，再修改设置");
     const accounts = this.data.accounts.filter(
-      (a) => a.enabled && ["tieba", "juejin", "csdn"].includes(a.platform),
+      (a) => a.enabled && ["tieba", "juejin", "csdn", "zhihu"].includes(a.platform),
     );
     if (!accounts.length) {
       this.toast("先添加一个支持每日计划的社区账号");
@@ -254,10 +254,12 @@ export class CommunityWorkspace extends CommunityUI {
     const f = document.querySelector("#com-v2-wizard");
     if (!f) return;
     const d = this.wizard.data;
-    for (const key of ["name", "account_id", "board", "rules_note"])
+    for (const key of ["name", "account_id", "board", "rules_note", "start_date"])
       if (f.elements[key]) d[key] = f.elements[key].value.trim();
     if (f.elements.wizard_platform)
       this.wizard.platform = f.elements.wizard_platform.value;
+    if (this.wizard.platform === "zhihu") d.board="";
+    if (d.start_date === "") d.start_date=null;
     if (f.elements.replies_per_day)
       d.replies_per_day = Number(f.elements.replies_per_day.value);
     if (f.elements.source_boards)
@@ -306,6 +308,7 @@ export class CommunityWorkspace extends CommunityUI {
           ["tieba", "百度贴吧"],
           ["juejin", "稀土掘金"],
           ["csdn", "CSDN"],
+          ["zhihu", "知乎"],
         ],
         w.platform,
       )}${select(
@@ -315,7 +318,7 @@ export class CommunityWorkspace extends CommunityUI {
           .filter((a) => a.enabled && a.platform === w.platform)
           .map((a) => [a.id, a.name]),
         d.account_id,
-      )}</div><div class="source-summary"><strong>${e(a ? connectionStatus(a).label : "该平台尚无可用账号")}</strong>${risk ? e(risk.reason) : "选择账号后，继续设置目标和每日安排。"}${w.id ? "<br>已有计划保留原账号，历史记录不会转移。" : ""}</div><p class="form-note">每日计划目前支持贴吧、掘金和 CSDN。其他平台可在内容记录中创建帖子。</p>`;
+      )}</div><div class="source-summary"><strong>${e(a ? connectionStatus(a).label : "该平台尚无可用账号")}</strong>${risk ? e(risk.reason) : "选择账号后，继续设置目标和每日安排。"}${w.id ? "<br>已有计划保留原账号，历史记录不会转移。" : ""}</div><p class="form-note">每日计划支持已核验的贴吧、掘金和知乎本机账号。其他平台可在内容记录中创建帖子。</p>`;
     if (w.step === 2)
       body =
         field(
@@ -334,10 +337,10 @@ export class CommunityWorkspace extends CommunityUI {
           "board",
           d.board,
           "text",
-          `required maxlength="50" placeholder="${w.platform === "tieba" ? "人工智能" : w.platform === "juejin" ? "人工智能" : "博客"}"`,
+          `${w.platform === "zhihu" ? "readonly" : "required"} maxlength="50" placeholder="${w.platform === "tieba" ? "人工智能" : w.platform === "juejin" ? "人工智能" : "博客"}"`,
         ) +
-        (w.platform === "csdn"
-          ? '<p class="form-note">CSDN使用指定原帖评论素材；自动查找目标尚未接入。</p>'
+        (["csdn","zhihu"].includes(w.platform)
+          ? '<p class="form-note">请使用已核对原文的指定帖评论素材；知乎专栏文章不需要填写板块。</p>'
           : field(
               "评论来源（标签 / 吧名，最多3个）",
               "source_boards",
@@ -347,7 +350,7 @@ export class CommunityWorkspace extends CommunityUI {
             )) +
         `<label class="field"><span>发布位置与内容规则</span><textarea name="rules_note" rows="3" required minlength="12" maxlength="1000" placeholder="记录目标社区允许的内容、要回复的问题类型等…">${e(d.rules_note)}</textarea></label>`;
     if (w.step === 3)
-      body =
+      body = field("开始日期", "start_date", d.start_date || "", "date", "") +
         field(
           "每天开始时间（北京时间）",
           "start_time",

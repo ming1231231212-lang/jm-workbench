@@ -80,6 +80,8 @@ class DailyPlans:
                 if current and current['next_check']:times.append((max(now,current['next_check']),'重新检查素材、目标与账号连接'))
                 start=local.replace(hour=p['payload']['hour'],minute=p['payload']['minute'],second=0,microsecond=0)
                 if current:start+=timedelta(days=1)
+                if p['payload'].get('start_date'):
+                    start=max(start,datetime.fromisoformat(p['payload']['start_date']).replace(tzinfo=SHANGHAI,hour=p['payload']['hour'],minute=p['payload']['minute']))
                 times.append((max(now,start.timestamp()),'安排每日任务'))
                 p['next_action_at'],p['next_action']=min(times,key=lambda t:t[0])
                 p['next_send_at']=max(now,queued[0]['due']) if queued else 0
@@ -87,9 +89,10 @@ class DailyPlans:
         return plans
 
     def save(self,payload,ident=None):
-        data=payload.model_dump();now=self.s.clock()
+        data=payload.model_dump(mode='json');now=self.s.clock()
         a=self.s.account(data['account_id'])
-        if a['platform'] not in ('tieba','juejin','csdn'):raise ValueError('每日评论计划仅支持百度贴吧、掘金和CSDN')
+        if a['platform'] not in ('tieba','juejin','csdn','zhihu'):raise ValueError('此平台尚未接入每日评论计划')
+        if a['platform']=='zhihu' and not a.get('automatic_execution'):raise ValueError('请先完成知乎本机发布配置和账号核验')
         destination(a['platform'],data['board'])
         for r in data['replies']:thread_url(a['platform'],r['url'])
         if a['platform'] in ('juejin','csdn'):
@@ -101,6 +104,13 @@ class DailyPlans:
             for label in data['source_boards']:tag_label(label)
             for topic in data['topics']:validate_payload({**topic,'kind':'thread','category':data['board']},data['board'])
             for reply in data['replies']+data['reply_rules']:validate_payload({**reply,'kind':'reply'},data['replies'][0]['url'] if data['replies'] else ('https://blog.csdn.net/fixture_author/article/details/123456789' if a['platform']=='csdn' else 'https://juejin.cn/post/1000000000000000000'))
+        elif a['platform']=='zhihu':
+            from .zhihu import validate_payload
+            if data['reply_rules'] or data['source_boards']:raise ValueError('知乎请使用已核对原文的指定帖评论')
+            for topic in data['topics']:
+                validate_payload({**topic,'kind':'thread'})
+                if not topic['platform_tags']:raise ValueError('知乎文章需配置相关话题')
+            for reply in data['replies']:validate_payload({**reply,'kind':'reply'})
         elif any(len(t['title'])>31 for t in data['topics']):raise ValueError('贴吧标题最多31字')
         with self.lock,self.store.connect(True) as db:
             # Account deletion and plan creation share the same write transaction.
@@ -167,6 +177,8 @@ class DailyPlans:
                 if force:raise ValueError('请先启用每日计划')
                 return {'message':'每日计划未启用'}
             d=p['payload'];due=local.replace(hour=d['hour'],minute=d['minute'],second=0,microsecond=0).timestamp()
+            if d.get('start_date') and day<d['start_date']:
+                return {'message':'等待计划开始日期 '+d['start_date']}
             if not force and now<due:return {'message':'等待每日执行时间'}
             checks=self.store.rows('SELECT * FROM community_plan_checks WHERE plan_id=? AND day=?',(ident,day))
             if checks and not force and (not checks[0]['next_check'] or now<checks[0]['next_check']):

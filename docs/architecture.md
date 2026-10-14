@@ -150,3 +150,9 @@ Windows任务设置语义参考Microsoft官方文档：[任务设置](https://le
 六个主模块与四个二级路由共享`workspace.css`及`workspace.js`。`body.jm-workspace`始终存在，`body.community-v2`仅标识社区专有视图；共用字体、色彩、导航、按钮、表单、弹窗与响应式规则已从社区样式中提取。旧模块结构通过`workspace-modules.css`适配，手机数据表以带字段名的记录卡片呈现，账号任务矩阵保留横向滚动。
 
 `ViewRequests`为每次渲染分配序号，迟到的前一个模块或前一次刷新不能改写当前DOM。移动导航与密度由全局控制器处理，旧社区密度可迁移；用户偏好只保存在本地localStorage，业务数据依然来自API。所有弹窗错误使用同一可见提示，读取失败展示重试。接口、执行器、数据库结构与平台保护未更改。完整功能覆盖见`unified-workspace-ui.md`。
+
+## 日常Chrome本机社区执行
+
+界面通过Community.bind_native核验原账号主页并冻结账号版本，DailyPlans依据开始日期选用未用素材；Community仍负责任务快照、原帖/正文去重、共享额度和恢复。BoundedCommunityAdapter约束操作进程寿命，NativeRuntime持有跨进程桌面锁并在提交前复查数据库状态。NativePublisher分开调用文章/评论准备与回执核验；NativeChromeChannel仅在同一日常Chrome窗口中创建和复用任务标签，scripts/native_chrome.ps1负责原生UIA、焦点、网址与遮挡检查。
+
+原账号身份核验与文章草稿使用不同任务标签。文章草稿指纹和实际全文必须一致才能恢复。输入网址的实际目的地、作者主页别名和显示名称分别验证，不根据昵称或“网页链接”显示直接判成功。单次提交结果不明后保持暂停并由既有回执接口处理，风险不因本机重连解除。详细入口、测试与运行条件见[native-community-daily.md](native-community-daily.md)。

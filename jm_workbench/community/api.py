@@ -1,6 +1,6 @@
 from fastapi import APIRouter, Query
 from fastapi.responses import Response
-from .models import CommunityAccount, CommunityPost, LinkRecord, ResolveRecord, ClearRecord, DailyPlan, BackfillInput
+from .models import CommunityAccount, CommunityPost, LinkRecord, ResolveRecord, ClearRecord, DailyPlan, BackfillInput,NativeBindInput
 
 
 def router(service):
@@ -51,6 +51,9 @@ def router(service):
 
     @api.post('/accounts/{ident}/check')
     def check(ident:str):return service.check_account(ident)
+
+    @api.post('/accounts/{ident}/native')
+    def native_binding(ident:str,payload:NativeBindInput):return service.bind_native(ident,payload)
 
     @api.post('/accounts/{ident}/sync')
     def sync(ident:str):return service.sync_account(ident)
