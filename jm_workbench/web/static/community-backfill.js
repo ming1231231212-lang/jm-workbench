@@ -1,5 +1,5 @@
 import { escape as e, button as b } from './ui.js';
-const labels = {manual:'待网页发布',draft:'正文已补录 · 待安排',missing_target:'待匹配原帖',missing_content:'待补充正文',needs_check:'原任务需处理',submitted:'平台已接收',recorded:'人工登记 · 待核验',queued:'已排队',running:'正在执行'};
+const labels = {cancelled:'已取消',manual:'待网页发布',draft:'正文已补录 · 待安排',missing_target:'待匹配原帖',missing_content:'待补充正文',needs_check:'原任务需处理',submitted:'平台已接收',recorded:'人工登记 · 待核验',queued:'已排队',running:'正在执行'};
 export function backfillView(data, expanded = false) {
   const ledger = data.backfill;
   if (!ledger?.total) return '';

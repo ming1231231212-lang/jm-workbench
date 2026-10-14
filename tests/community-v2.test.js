@@ -161,7 +161,7 @@ test("article-only goals and historical goals stay separate", () => {
 test("plan list exposes next check and zero reply goal", () => {
   const p={...plan,payload:{...plan.payload,name:"Test",board:"ai",hour:10,minute:0,replies_per_day:0},days:[],next_action_at:1791279000,next_action:"重新检查素材、目标与账号连接"};
   const html=workspace({...data,plans:[p],posts:[],summary:{day:"2026-10-06"}}, {tab:"plans",selected:new Set()});
-  assert.ok(html.includes("评论 <b>0/0</b>"));
+  assert.ok(html.includes("评论已关闭"));
   assert.ok(html.includes("重新检查素材、目标与账号连接") && html.includes("北京时间"));
 });
 test("unknown overrides accepted and receipts do not imply visible", () => {
@@ -308,4 +308,16 @@ test("comment drawer never creates script or credentialed links", () => {
   assert.ok(!html.includes('href="https://user:'));
   assert.ok(html.includes("&lt;iframe&gt;"));
   assert.ok(!html.includes("<img>"));
+});
+
+
+test("posts-only progress retains historical comments without filling article progress", () => {
+  const p={...plan,payload:{...plan.payload,name:"Daily",board:"ai",hour:1,minute:0,source_boards:[],replies_per_day:0},
+    days:[{day:"2026-10-14",reply_goal:0,counts:{thread:{recorded:0},reply:{recorded:5}}}]};
+  const d={...data,plans:[p],posts:[],summary:{day:"2026-10-14"}};
+  const html=workspace(d,{tab:"plans",selected:new Set()});
+  assert.ok(html.includes("每天 01:00 · 仅发帖子") && html.includes("评论已关闭"));
+  assert.ok(html.includes('max="1" value="0"') && !html.includes("5/0"));
+  const detail=drawer(d,{drawer:{type:"plan",id:"p"},drawerTab:"summary"});
+  assert.ok(detail.includes("今日已发布 5 条，记录保留") && !detail.includes("5/0"));
 });

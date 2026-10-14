@@ -89,7 +89,7 @@ class DailyPlans:
                     start=max(start,datetime.fromisoformat(p['payload']['start_date']).replace(tzinfo=SHANGHAI,hour=p['payload']['hour'],minute=p['payload']['minute']))
                 if p['payload'].get('auto_prepare'):
                     prepared=next((b for b in p['preparations'] if b['day']==start.date().isoformat()),None)
-                    if not prepared:times.append((max(now,(start-timedelta(hours=1)).timestamp()),'自动准备文章和相关原帖评论'))
+                    if not prepared:times.append((max(now,(start-timedelta(hours=1)).timestamp()),'自动准备文章和相关原帖评论' if p['payload'].get('replies_per_day',5) else '自动准备文章'))
                     elif prepared['state']!='ready':times.append((max(now,prepared['next_check'] or (start-timedelta(hours=1)).timestamp()),'继续准备内容并核对素材缺口'))
                 times.append((max(now,start.timestamp()),'安排每日任务'))
                 p['next_action_at'],p['next_action']=min(times,key=lambda t:t[0])
@@ -131,6 +131,16 @@ class DailyPlans:
                 if old['state']=='enabled':raise ValueError('请先暂停每日计划再修改')
                 if json.loads(old['payload'])['account_id']!=a['id']:raise ValueError('已有计划不能替换账号，请新建计划')
                 db.execute("UPDATE community_plans SET payload=?,state='paused',message='配置已保存，待启用',updated=? WHERE id=?",(dumps(data),now,ident))
+                if data['replies_per_day']==0:
+                    # Closing replies also closes unsent daily/backfill snapshots;
+                    # successful and uncertain receipts remain immutable.
+                    reply_posts="SELECT post_id FROM community_plan_items WHERE plan_id=? AND kind='reply' UNION SELECT post_id FROM community_backfill WHERE plan_id=? AND kind='reply'"
+                    db.execute(f"UPDATE community_jobs SET state='cancelled',message='自动评论已关闭，取消未发送任务',updated=? WHERE state IN ('queued','paused','manual') AND post_id IN ({reply_posts})",(now,ident,ident))
+                    db.execute(f"UPDATE community_jobs SET message='cancel_requested' WHERE state='running' AND post_id IN ({reply_posts})",(ident,ident))
+                    from .service import SHANGHAI
+                    today=datetime.fromtimestamp(now,SHANGHAI).date().isoformat()
+                    db.execute('UPDATE community_plan_checks SET reply_goal=0 WHERE plan_id=? AND day=?',(ident,today))
+                    db.execute("UPDATE community_plan_days SET message='仅发帖子；自动评论已关闭，已发布记录保留',updated=? WHERE plan_id=? AND day=?",(now,ident,today))
             else:
                 ident=uid();db.execute('INSERT INTO community_plans VALUES(?,?,?,?,?,?,?,?,?)',
                     (ident,dumps(data),'paused','',0,'','配置已保存，待启用',now,now))
@@ -313,10 +323,9 @@ class DailyPlans:
                         used.add(material_id(r['body']));targets.add(url)
                         if len(replies)>=needed:break
                 for r in replies:enqueue('reply',r,r['url'])
-                message=f"已安排帖子 {created['thread']}/1、评论 {created['reply']}/{reply_goal}；同帖和内容不重复"
+                message=(f"已安排帖子 {created['thread']}/1、评论 {created['reply']}/{reply_goal}；同帖和内容不重复" if reply_goal else f"已安排帖子 {created['thread']}/1；自动评论已关闭，已发布记录保留")
                 if created['thread']<1:message+='；今日文章额度已用（含网页登记）' if thread_used else '；主题素材不足'
                 if created['reply']<reply_goal:message+='；合适目标或未用评论素材不足'
-                if reply_goal==0:message+='；自动评论已关闭，帖子独立执行'
                 if discover_note:message+='；'+discover_note
                 if errors:message+='；'+errors[0]
                 with self.store.connect(True) as db:

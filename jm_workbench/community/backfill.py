@@ -111,6 +111,7 @@ class Backfill:
                 bodies, targets = self._used(db, a['id'])
                 plans[r['plan_id']] = (p,a,bodies,targets)
             p,a,bodies,targets = plans[r['plan_id']]
+            if r['kind']=='reply' and not p.get('replies_per_day',5):continue
             selected = None
             materials = p['topics'] if r['kind']=='thread' else p['replies']
             for material in materials:
@@ -155,17 +156,18 @@ class Backfill:
             a = self.s.account(aid,True)
             if hasattr(self.s.adapter,'ensure_connection'):self.s.adapter.ensure_connection(a)
             self.s.check_account(aid)
-            candidates = self.s.adapter.discover(a,p['source_boards']) if p['source_boards'] else []
+            candidates = self.s.adapter.discover(a,p['source_boards']) if p['source_boards'] and p.get('replies_per_day',5) else []
             with self.store.connect(True) as db:self._fill(db,plan_id,candidates)
         return {'message':'已检查账号并补充可核验的原帖和草稿；尚未发布','backfill':self.state()}
 
     def state(self):
         items = []
-        for r in self.store.rows('''SELECT b.*,a.data AS account_data FROM community_backfill b
+        for r in self.store.rows('''SELECT b.*,p.payload AS plan_payload,a.data AS account_data FROM community_backfill b
             JOIN community_plans p ON p.id=b.plan_id
             JOIN community_accounts a ON a.id=json_extract(p.payload,'$.account_id')
             ORDER BY b.day,a.id,b.kind,b.slot'''):
             account = json.loads(r.pop('account_data'));r['platform'] = account['platform']
+            replies_enabled=json.loads(r.pop('plan_payload')).get('replies_per_day',5)>0
             jobs = self.s.jobs(r['post_id']) if r['post_id'] else []
             # Earlier attempts remain visible with their original receipts.
             states = {jobs[-1]['state']} if jobs else set()
@@ -175,6 +177,8 @@ class Backfill:
                 'missing_target' if r['kind']=='reply' else 'missing_content')
             r['jobs'] = jobs
             if jobs:r['message'] = jobs[-1].get('message') or r['message']
+            if r['kind']=='reply' and not replies_enabled and not states & {'submitted','recorded','unknown','running'}:
+                r['status']='cancelled';r['message']='自动评论已关闭，不再安排补发；原内容与记录保留'
             items.append(r)
         return {'items':items,'total':len(items),'threads':sum(r['kind']=='thread' for r in items),
                 'replies':sum(r['kind']=='reply' for r in items),
@@ -206,6 +210,8 @@ class Backfill:
                 else:
                     rows=db.execute("SELECT * FROM community_backfill WHERE plan_id=? AND post_id!='' ORDER BY CASE kind WHEN 'thread' THEN 0 ELSE 1 END,day,slot",(plan_id,)).fetchall()
                 for r in rows:
+                    if r['kind']=='reply' and not p['payload'].get('replies_per_day',5):
+                        skipped+=1;continue
                     db.execute('SAVEPOINT backfill_queue')
                     try:
                         post=db.execute('SELECT * FROM community_posts WHERE id=?',(r['post_id'],)).fetchone()

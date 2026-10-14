@@ -141,7 +141,7 @@ class AutoMaterials:
             with self.store.connect(True) as db:db.execute("UPDATE community_preparations SET state='waiting',message=?,next_check=? WHERE plan_id=? AND day=?",(message,now+86400,ident,day))
             return {'message':message}
         data={'counts':{k:len(available[k])+sum(i['kind']==k for i in existing) for k in missing},'sources':[],'review':''}
-        message='已有素材满足当天1篇文章和评论目标';state='ready';next_check=0
+        message='已有素材满足当天1篇文章和评论目标' if p['payload'].get('replies_per_day',5) else '当天1篇文章素材已就绪；自动评论已关闭';state='ready';next_check=0
         if any(missing.values()):
             attempts+=1
             with self.store.connect(True) as db:
@@ -181,7 +181,8 @@ class AutoMaterials:
                             missing[kind]=max(0,missing[kind]-len(values));data['counts'][kind]+=len(values)
                 state='waiting' if any(missing.values()) else 'ready'
                 message=f"已准备文章 {min(data['counts']['thread'],1)}/1、评论 {min(data['counts']['reply'],p['payload'].get('replies_per_day',5))}/{p['payload'].get('replies_per_day',5)}"
-                if state=='waiting':message+='；相关活跃原帖不足，稍后扩大查找，不填无关内容'
+                if not p['payload'].get('replies_per_day',5):message=f"已准备文章 {min(data['counts']['thread'],1)}/1；自动评论已关闭"
+                if state=='waiting':message+=('；相关活跃原帖不足，稍后扩大查找，不填无关内容' if p['payload'].get('replies_per_day',5) else '；文章素材尚未通过检查，稍后继续准备')
             except Exception as ex:
                 state='waiting';message=str(ex)[:200] if isinstance(ex,ValueError) else '原帖读取或模型连接暂未完成，保留已有素材并稍后重查'
             if state=='waiting':
