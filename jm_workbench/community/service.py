@@ -351,7 +351,11 @@ class Community:
         receipt={'note':note,'visibility':'user_reported'}
         if outcome=='submitted':receipt['url']=self.publication_url(job,url)
         with self.store.connect(True) as db:
-            if db.execute('SELECT state FROM community_jobs WHERE id=?',(ident,)).fetchone()['state']!='unknown':raise ValueError('仅结果不明记录需要此处理')
+            current=db.execute('SELECT state,started,receipt FROM community_jobs WHERE id=?',(ident,)).fetchone()
+            if current['state']!='unknown':raise ValueError('仅结果不明记录需要此处理')
+            if outcome=='not_sent':
+                receipt.update(submitted=False,phase='resolved_not_sent',previous_started=current['started'],previous_receipt=json.loads(current['receipt']))
+                db.execute('UPDATE community_jobs SET started=0 WHERE id=?',(ident,))
             db.execute('UPDATE community_jobs SET state=?,receipt=?,message=?,updated=? WHERE id=?',('recorded' if outcome=='submitted' else 'not_sent',dumps(receipt),'用户核实：'+note,self.clock(),ident))
         return {'message':'核实结果已记录，没有自动重发；平台暂停需单独处理'}
 
@@ -509,6 +513,9 @@ class Community:
         except Exception:
             status,message='unknown','提交结果不明，已暂停此平台；请到网站核实，禁止自动重发'
         with self.store.connect(True) as db:
+            if status=='unknown':
+                reserved=json.loads(db.execute('SELECT receipt FROM community_jobs WHERE id=?',(job['id'],)).fetchone()['receipt'])
+                if reserved.get('phase')=='native_submit_reserved':receipt={**receipt,**reserved}
             if status=='queued':
                 current=db.execute('SELECT message FROM community_jobs WHERE id=?',(job['id'],)).fetchone()
                 plan=db.execute('SELECT p.state FROM community_plan_items i JOIN community_plans p ON p.id=i.plan_id WHERE i.post_id=?',(job['post_id'],)).fetchone()

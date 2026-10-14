@@ -246,7 +246,21 @@ if($q.action -in @('focus-copy','focus-paste','focus-clear')){
   $html=[JmClipboard]::ReadHtml()
  }else{
   $editorText=$e.GetCurrentPattern([System.Windows.Automation.TextPattern]::Pattern).DocumentRange.GetText(-1)
-  if(![string]::IsNullOrWhiteSpace($editorText)){throw '原生复制尚未完成，保留现有正文，未提交'}
+  $emptyComment=$false
+  # Chromium exposes Juejin's CSS placeholder through TextPattern although
+  # there is no selectable editor text. Require its independent zero counter
+  # and disabled Send control in the same editor wrapper, not text alone.
+  if($q.action -eq 'focus-copy' -and ([uri](CurrentUrl)).Host -eq 'juejin.cn' -and $editorText.Trim() -in @('抢首评，友善交流','友善交流，共建社区')){
+   $wrapper=$walker.GetParent($e)
+   $counter=$wrapper.FindFirst($scope,[System.Windows.Automation.AndCondition]::new(
+    [System.Windows.Automation.PropertyCondition]::new([System.Windows.Automation.AutomationElement]::ControlTypeProperty,[System.Windows.Automation.ControlType]::Text),
+    [System.Windows.Automation.PropertyCondition]::new([System.Windows.Automation.AutomationElement]::NameProperty,'0')))
+   $send=$wrapper.FindFirst($scope,[System.Windows.Automation.AndCondition]::new(
+    [System.Windows.Automation.PropertyCondition]::new([System.Windows.Automation.AutomationElement]::ControlTypeProperty,[System.Windows.Automation.ControlType]::Button),
+    [System.Windows.Automation.PropertyCondition]::new([System.Windows.Automation.AutomationElement]::NameProperty,'发送')))
+   $emptyComment=($null -ne $counter -and $null -ne $send -and !$send.Current.IsEnabled)
+  }
+  if(![string]::IsNullOrWhiteSpace($editorText) -and !$emptyComment){throw '原生复制尚未完成，保留现有正文，未提交'}
  }
  if($q.action -eq 'focus-clear'){
   if($copied -cne $q.text){throw '临时输入内容改变，已保留，未清空'}

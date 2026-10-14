@@ -79,9 +79,36 @@ def test_only_pre_submit_overlay_can_retry_after_wait(ctx,monkeypatch):
     monkeypatch.setattr('jm_workbench.community.native_runtime.desktop_lock',lambda _:nullcontext())
     class Publisher:
         error=NativeStopped('其他窗口遮挡目标控件，未点击')
+        before_submit=staticmethod(lambda:None)
         def publish(self,*_):raise self.error
     publisher=Publisher();monkeypatch.setattr(runtime,'publisher',lambda *_:publisher)
     account={**s.account(a),'native_binding':{}}
     with pytest.raises(RetryablePreflight):runtime.publish(account,{},'')
     publisher.error=NativeUnknown('文章已进入单次提交边界，结果不明')
     with pytest.raises(NativeUnknown):runtime.publish(account,{},'')
+
+
+@pytest.mark.parametrize('entered',[False,True])
+def test_native_unexpected_errors_are_classified_at_durable_submit_boundary(ctx,monkeypatch,entered):
+    from contextlib import nullcontext
+    from jm_workbench.community.native_runtime import NativeRuntime
+    s,_,a,_=ctx;runtime=NativeRuntime(s.cfg.config)
+    monkeypatch.setattr('jm_workbench.community.native_runtime.desktop_lock',lambda _:nullcontext())
+    class Publisher:
+        before_submit=staticmethod(lambda:None)
+        def publish(self,*_):
+            if entered:self.before_submit()
+            raise KeyError('fixture-local-error')
+    publisher=Publisher();monkeypatch.setattr(runtime,'publisher',lambda *_:publisher)
+    with pytest.raises(KeyError if entered else PreflightStopped):runtime.publish({**s.account(a),'native_binding':{}},{},'')
+
+
+def test_unknown_outcome_keeps_durable_native_submission_marker(ctx):
+    s,f,a,n=ctx;p=reply(s,a);s.launch(p)
+    def uncertain(*_):
+        with s.store.connect(True) as db:
+            db.execute("UPDATE community_jobs SET receipt=? WHERE state='running'",(dumps({'phase':'native_submit_reserved','submitted':None,'reserved_at':n[0]}),))
+        raise RuntimeError('fixture transport failed after submit')
+    f.publish=uncertain;s.tick();job=s.jobs(p)[0]
+    assert job['state']=='unknown' and job['receipt']['phase']=='native_submit_reserved'
+    assert job['receipt']['reserved_at']==n[0] and s.state()['risk']

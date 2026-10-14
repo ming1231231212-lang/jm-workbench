@@ -350,16 +350,35 @@ def author_scope(s, binding, body):
     return None
 
 
+def published_url_present(s, url):
+    links=[n for n in s['nodes'] if n['type']=='Hyperlink']
+    if any(url in n.get('name','') and link_destination(n.get('value',''))!=url for n in links):return False
+    if any(link_destination(n.get('value',''))==url for n in links):return True
+    # A literal URL is valid published content even when the site removes its
+    # clickable link. Never accept a link label whose destination is different.
+    for n in s['nodes']:
+        if n['type']!='Text' or url not in n.get('name',''):continue
+        if not any(inside(s,n['key'],link['key']) for link in links):return True
+    return False
+
+
 def verify_article(p, account, binding, payload):
     platform = account['platform']
     from .registry import juejin_article_result_url
     result_url=lambda value:juejin_article_result_url(value) if platform=='juejin' else thread_url(platform,value)
-    for _ in range(p.poll_attempts):
+    source=p.ui;profile_fallback=False
+    for attempt in range(p.poll_attempts):
         p.sleep(1)
         try:
-            s = p.ui.call('follow_published')
+            s = source.call('follow_published')
             try: url = result_url(s['url'])
             except ValueError:
+                if (platform=='tieba' and attempt>=1 and not profile_fallback and
+                    urlsplit(s['url']).path=='/f' and p.identity_ui is not None):
+                    # Tieba can close its composer without refreshing the board.
+                    # Read the verified owner's posts once; never press Submit again.
+                    p.check(account,binding);source=p.identity_ui;profile_fallback=True
+                    s=source.call('snapshot')
                 links = []
                 for n in visible(s):
                     if n['type'] != 'Hyperlink' or normalized(payload['title']) not in normalized(n.get('name')):continue
@@ -367,16 +386,15 @@ def verify_article(p, account, binding, payload):
                     except ValueError:pass
                 links = list(dict.fromkeys(links))
                 if len(links)==1:
-                    if hasattr(p.ui,'open_receipt'):p.ui.open_receipt(links[0],payload['title'])
-                    else:p.ui.call('open',url=links[0])
-                    s=p.ui.call('follow_published');url=result_url(s['url'])
+                    if source is p.ui and hasattr(source,'open_receipt'):source.open_receipt(links[0],payload['title'])
+                    else:source.call('open',url=links[0])
+                    s=source.call('follow_published');url=result_url(s['url'])
                 else:continue
             text = rendered(s['text'])
             docs=[n for n in s['nodes'] if n['type']=='Document']
             semantic=rendered(semantic_value(s,docs[0]['key'],s['text'],strict=False)) if len(docs)==1 else text
             wanted=re.findall(r'https?://[^\s\u200b\ufeff\ufffc，。！？、<>"“”]+',payload['body'])
-            destinations={link_destination(n.get('value','')) for n in s['nodes'] if n['type']=='Hyperlink'}
-            if any(url not in destinations for url in wanted):continue
+            if any(not published_url_present(s,value) for value in wanted):continue
             if rendered(payload['title']) not in text:continue
             if not all(rendered(para) in text or rendered(para) in semantic for para in payload['body'].split('\n') if rendered(para)):continue
             author = author_scope(s,binding,payload['body'])

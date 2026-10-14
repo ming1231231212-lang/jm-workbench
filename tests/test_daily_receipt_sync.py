@@ -118,3 +118,19 @@ def test_today_continuation_cannot_retry_uncertain_submission(ctx):
     s.daily.control(p,'enable')
     assert s.daily.control(p,'continue-today')['queued']==0
     assert s.store.rows('SELECT * FROM community_jobs ORDER BY id')==before and not f.sent
+
+
+def test_explicit_not_sent_resolution_keeps_audit_and_allows_only_explicit_continuation(ctx):
+    s,f,a,n=ctx;p=s.daily.save(config(a))['id'];s.daily.control(p,'enable');s.daily.prepare(p,force=True)
+    s.daily.control(p,'pause');job=s.store.rows('SELECT id FROM community_jobs LIMIT 1')[0]['id']
+    with s.store.connect(True) as db:
+        db.execute("UPDATE community_jobs SET state='unknown',started=?,receipt=? WHERE id=?",(n[0],json.dumps({'phase':'fixture_unknown'}),job))
+    s.resolve(job,'not_sent','已核对原任务尚未提交，保存实际准备异常依据后继续')
+    old=s.job(job)
+    assert old['state']=='not_sent' and old['started']==0
+    receipt=json.loads(old['receipt'])
+    assert receipt['previous_started']==n[0] and receipt['previous_receipt']=={'phase':'fixture_unknown'}
+    assert not f.sent and not s.store.rows("SELECT id FROM community_jobs WHERE state='queued'")
+    s.daily.control(p,'enable');assert s.daily.control(p,'continue-today')['queued']==6
+    assert len(s.store.rows('SELECT * FROM community_backfill_continuations'))==6
+    assert not f.sent

@@ -216,8 +216,9 @@ class Backfill:
                         old=jobs[-1] if jobs else None
                         if old:
                             receipt=json.loads(old['receipt']);snap=json.loads(old['snapshot'])
-                            safe=(old['started']==0 and (not receipt or (receipt.get('phase')=='preflight' and receipt.get('submitted') is False)))
-                            if old['state'] not in ('paused','failed') or not safe or (old['state']=='failed' and not receipt):
+                            resolved=(old['state']=='not_sent' and receipt.get('phase')=='resolved_not_sent' and receipt.get('submitted') is False and len(receipt.get('note','').strip())>=12)
+                            safe=(old['started']==0 and (not receipt or (receipt.get('phase')=='preflight' and receipt.get('submitted') is False) or resolved))
+                            if old['state'] not in ('paused','failed','not_sent') or not safe or (old['state']=='failed' and not receipt):
                                 raise ValueError('原任务缺少明确未提交证据，保留原记录')
                             if any(j['started'] or j['state'] in ('submitted','recorded','unknown','manual','running') for j in jobs):
                                 raise ValueError('存在提交或不确定历史，不能自动补发')

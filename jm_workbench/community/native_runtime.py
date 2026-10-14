@@ -8,7 +8,7 @@ from pathlib import Path
 
 from ..core.config import revision
 from ..core.db import Store,dumps
-from .adapters import PreflightStopped,RetryablePreflight,IdentityChanged
+from .adapters import PreflightStopped,RetryablePreflight,IdentityChanged,NotSubmitted
 from .native import NativePublisher,NativeStopped,NativeUnknown
 from .native_channel import NativeChromeChannel
 
@@ -74,11 +74,22 @@ class NativeRuntime:
             except NativeStopped as ex:raise RetryablePreflight(str(ex)) from None
     def publish(self,account,payload,target):
         with desktop_lock(self.config.home):
-            try:return self.publisher(account,payload,target).publish(account,account['native_binding'],payload,target)
+            publisher=self.publisher(account,payload,target);entered=False
+            reserve=publisher.before_submit
+            def mark_submission():
+                nonlocal entered
+                reserve();entered=True
+            publisher.before_submit=mark_submission
+            try:return publisher.publish(account,account['native_binding'],payload,target)
+            except NativeUnknown:raise
+            except NotSubmitted:raise
             except NativeStopped as ex:
                 if '其他窗口遮挡目标控件' in str(ex):
                     raise RetryablePreflight('窗口暂时遮挡发布控件，本次未提交；稍后重查') from None
                 raise PreflightStopped(str(ex)) from None
+            except Exception as ex:
+                if not entered:raise PreflightStopped('本机准备发生'+type(ex).__name__+'，尚未进入提交；原内容保留') from ex
+                raise
     def discover(self,account,terms):
         from .native_discovery import NativeDiscovery
         if account['platform'] not in ('tieba','juejin','zhihu'):raise PreflightStopped('此平台尚未接入本机原帖发现')

@@ -301,3 +301,33 @@ def test_visible_url_text_does_not_prove_a_different_link_destination():
             s=result_snapshot(profile,title,body);s['nodes'].append({'key':'url','parent':'article','type':'Hyperlink','visible':True,'name':'https://fixture.example/','value':'https://evil.example/'})
             return s
     with pytest.raises(NativeUnknown):verify_article(NativePublisher(Result(),sleep=lambda _:None,poll_attempts=2),{'platform':'zhihu'},{'profile_url':profile,'name':'fixture'},{'title':title,'body':body})
+
+
+def test_published_literal_website_url_keeps_full_body_and_author_verification():
+    profile='https://www.zhihu.com/people/fixture';title='网站使用方法'
+    body='这里核对网站的来源、实际使用条件和完整的使用方法，网址 https://fixture.example/ 。'
+    class Result:
+        def call(self,action,**kw):return result_snapshot(profile,title,body)
+    receipt=verify_article(NativePublisher(Result(),sleep=lambda _:None),{'platform':'zhihu'},{'profile_url':profile,'name':'fixture'},{'title':title,'body':body})
+    assert receipt['body']==body and receipt['author_url']==profile
+
+
+def test_tieba_result_can_be_found_from_verified_owner_when_board_stays_stale():
+    profile='https://tieba.baidu.com/home/main?id=tb.fixture';title='发表后的原帖核对'
+    body='说明：这是已发表的完整正文，必须同时验证对应作者与实际文章链接，不能只看成功提示。'
+    target='https://tieba.baidu.com/p/123456789'
+    class Board:
+        def call(self,action,**kw):
+            assert action=='follow_published'
+            return {'url':'https://tieba.baidu.com/f?kw=fixture','text':'旧列表','nodes':[]}
+    class Owner:
+        checked=False;opened=[]
+        def call(self,action,**kw):
+            assert self.checked
+            if action=='open':self.opened.append(kw['url']);return {}
+            if not self.opened:return {'url':profile,'text':title,'nodes':[{'key':'new','type':'Hyperlink','name':title,'value':target,'visible':True}]}
+            s=result_snapshot(profile,title,body);s['url']=target;return s
+    owner=Owner();p=NativePublisher(Board(),identity_ui=owner,sleep=lambda _:None,poll_attempts=3)
+    p.check=lambda *_:setattr(owner,'checked',True)
+    receipt=verify_article(p,{'platform':'tieba'},{'profile_url':profile,'name':'fixture'},{'title':title,'body':body})
+    assert receipt['url']==target and owner.opened==[target]
