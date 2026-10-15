@@ -9,7 +9,7 @@ from pathlib import Path
 from urllib.parse import urlsplit
 
 from ..core.config import ROOT
-from .native import NativeStopped
+from .native import NativeStopped,NativeTransient
 
 
 class NativeChromeChannel:
@@ -42,6 +42,10 @@ class NativeChromeChannel:
         except subprocess.TimeoutExpired as ex:
             raise TimeoutError('本机控件操作超时，未重试') from ex
         if p.returncode:
+            if '[JM_COPY_PENDING]' in (p.stderr or ''):
+                raise NativeTransient('正文复制暂未完成，原内容保留；尚未提交，稍后重查')
+            if '[JM_DESKTOP_WAIT]' in (p.stderr or ''):
+                raise NativeTransient('日常Chrome暂不可交互，尚未提交；桌面恢复后继续检查')
             raise NativeStopped((p.stderr or '本机Chrome操作未完成')[-1200:])
         result = json.loads(p.stdout)
         if all(result.get(k) for k in ('window', 'process_id', 'process_started')):

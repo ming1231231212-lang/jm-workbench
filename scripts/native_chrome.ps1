@@ -83,7 +83,12 @@ function CurrentUrl {
  }
 }
 function Focus {
- if(![JmNativeChrome]::Activate($h)){throw '日常Chrome不在可交互前台，未操作'}
+ if(![JmNativeChrome]::Activate($h)){throw '[JM_DESKTOP_WAIT] 日常Chrome不在可交互前台，未操作'}
+}
+function Test-JmEmptyControl([bool]$HasValue,[string]$Value,[string]$Text,[bool]$HasContent) {
+ # Chromium's empty input TextPattern can contain U+FFFC while ValuePattern
+ # is empty. An embedded image or real value must never be treated as empty.
+ return $HasValue -and !$HasContent -and $Value -match '^[\s\u200b\ufeff]*$' -and $Text -match '^[\s\u200b\ufeff\ufffc]*$'
 }
 function Guard {
  if(!$q.expected_url){throw '缺少原始页面网址，未操作'}
@@ -260,7 +265,16 @@ if($q.action -in @('focus-copy','focus-paste','focus-clear')){
     [System.Windows.Automation.PropertyCondition]::new([System.Windows.Automation.AutomationElement]::NameProperty,'发送')))
    $emptyComment=($null -ne $counter -and $null -ne $send -and !$send.Current.IsEnabled)
   }
-  if(![string]::IsNullOrWhiteSpace($editorText) -and !$emptyComment){throw '原生复制尚未完成，保留现有正文，未提交'}
+  $valuePattern=$null
+  $hasValue=$e.TryGetCurrentPattern([System.Windows.Automation.ValuePattern]::Pattern,[ref]$valuePattern)
+  $inputValue=if($hasValue){$valuePattern.Current.Value}else{''}
+  $hasContent=$false
+  foreach($child in $e.FindAll($scope,[System.Windows.Automation.Condition]::TrueCondition)){
+   $childType=$child.Current.ControlType.ProgrammaticName
+   if($childType -notin @('ControlType.Text','ControlType.Group') -or $child.Current.Name -notmatch '^[\s\u200b\ufeff\ufffc]*$'){$hasContent=$true;break}
+  }
+  $emptyControl=Test-JmEmptyControl $hasValue $inputValue $editorText $hasContent
+  if(![string]::IsNullOrWhiteSpace($editorText) -and !$emptyComment -and !$emptyControl){throw '[JM_COPY_PENDING] 原生复制尚未完成，保留现有正文，未提交'}
  }
  if($q.action -eq 'focus-clear'){
   if($copied -cne $q.text){throw '临时输入内容改变，已保留，未清空'}

@@ -14,6 +14,10 @@ class NativeStopped(ValueError):
     """Preflight proved that no submit was attempted."""
 
 
+class NativeTransient(NativeStopped):
+    """Identified local readiness failure; retry only before the submit boundary."""
+
+
 class NativeUnknown(RuntimeError):
     """The single submit may have happened; verification only, never resend."""
 

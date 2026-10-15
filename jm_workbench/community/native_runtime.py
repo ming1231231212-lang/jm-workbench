@@ -9,7 +9,7 @@ from pathlib import Path
 from ..core.config import revision
 from ..core.db import Store,dumps
 from .adapters import PreflightStopped,RetryablePreflight,IdentityChanged,NotSubmitted
-from .native import NativePublisher,NativeStopped,NativeUnknown
+from .native import NativePublisher,NativeStopped,NativeUnknown,NativeTransient
 from .native_channel import NativeChromeChannel
 
 
@@ -84,6 +84,8 @@ class NativeRuntime:
             except NativeUnknown:raise
             except NotSubmitted:raise
             except NativeStopped as ex:
+                if entered:raise NativeUnknown('已进入提交边界，页面核验暂未完成；保留原回执，不自动重发') from ex
+                if isinstance(ex,NativeTransient):raise RetryablePreflight(str(ex)) from None
                 if '其他窗口遮挡目标控件' in str(ex):
                     raise RetryablePreflight('窗口暂时遮挡发布控件，本次未提交；稍后重查') from None
                 raise PreflightStopped(str(ex)) from None
