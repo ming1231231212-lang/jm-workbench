@@ -35,3 +35,5 @@ Chrome空标题的UIA TextPattern可返回U+FFFC对象占位符，而ValuePatter
 显式本地复制暂未完成和桌面暂不可交互用NativeTransient分类；只有提交占位之前允许按现有5/10/20/30分钟退避重查。提交之后任何相同异常都保留NativeUnknown，不能重发。原账号变化、正文不一致、已有其他草稿、平台限制仍停止。每日只发一篇，评论0的规则不变。
 
 相关86项测试通过，含实际PowerShell函数边界测试；真实知乎空标题/正文分别通过前台pwsh及后台Windows PowerShell读取，4项实机检查通过。真实发送只续接用户授权的当天原三篇任务。
+
+贴吧contenteditable控件另需同时确认tb-editor-title/tb-editor-content、已观测的完整CSS提示、全选后的空选区、没有图片/链接等嵌入内容。提示语相同但实际可选文本非空时拒绝当作空框。三平台标题/正文在前台与后台两种PowerShell均实测通过，共12项；相关测试合计88项通过，另覆盖暂态失败退避后沿用同一任务恢复且计划始终启用。

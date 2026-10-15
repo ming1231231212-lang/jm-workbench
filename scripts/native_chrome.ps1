@@ -90,6 +90,14 @@ function Test-JmEmptyControl([bool]$HasValue,[string]$Value,[string]$Text,[bool]
  # is empty. An embedded image or real value must never be treated as empty.
  return $HasValue -and !$HasContent -and $Value -match '^[\s\u200b\ufeff]*$' -and $Text -match '^[\s\u200b\ufeff\ufffc]*$'
 }
+function Test-JmEmptyTiebaControl([string]$EditorId,[string]$Text,[string]$Selection,[int]$SelectionCount,[bool]$HasEmbedded) {
+ $hint=switch($EditorId){
+  'tb-editor-title' {'必填，请输入贴子标题(5-31个字)'}
+  'tb-editor-content' {'请输入正文（建议200-2000字）'}
+  default {''}
+ }
+ return $hint -ne '' -and $Text.Trim() -ceq $hint -and $SelectionCount -eq 1 -and $Selection -match '^[\s\u200b\ufeff]*$' -and !$HasEmbedded
+}
 function Guard {
  if(!$q.expected_url){throw '缺少原始页面网址，未操作'}
  Focus;$url=CurrentUrl
@@ -268,12 +276,23 @@ if($q.action -in @('focus-copy','focus-paste','focus-clear')){
   $valuePattern=$null
   $hasValue=$e.TryGetCurrentPattern([System.Windows.Automation.ValuePattern]::Pattern,[ref]$valuePattern)
   $inputValue=if($hasValue){$valuePattern.Current.Value}else{''}
-  $hasContent=$false
+  $hasContent=$false;$hasEmbedded=$false
   foreach($child in $e.FindAll($scope,[System.Windows.Automation.Condition]::TrueCondition)){
    $childType=$child.Current.ControlType.ProgrammaticName
-   if($childType -notin @('ControlType.Text','ControlType.Group') -or $child.Current.Name -notmatch '^[\s\u200b\ufeff\ufffc]*$'){$hasContent=$true;break}
+   if($childType -notin @('ControlType.Text','ControlType.Group')){$hasEmbedded=$true}
+   if($childType -notin @('ControlType.Text','ControlType.Group') -or $child.Current.Name -notmatch '^[\s\u200b\ufeff\ufffc]*$'){$hasContent=$true}
   }
   $emptyControl=Test-JmEmptyControl $hasValue $inputValue $editorText $hasContent
+  if(!$emptyControl -and $q.action -eq 'focus-copy' -and ([uri](CurrentUrl)).Host -eq 'tieba.baidu.com'){
+   $editorId='';$ancestor=$e
+   for($depth=0;$depth -lt 6 -and $ancestor;$depth++){
+    if($ancestor.Current.AutomationId -in @('tb-editor-title','tb-editor-content')){$editorId=$ancestor.Current.AutomationId;break}
+    $ancestor=$walker.GetParent($ancestor)
+   }
+   $ranges=@($e.GetCurrentPattern([System.Windows.Automation.TextPattern]::Pattern).GetSelection())
+   $selectionText=($ranges|ForEach-Object {$_.GetText(-1)}) -join ''
+   $emptyControl=Test-JmEmptyTiebaControl $editorId $editorText $selectionText $ranges.Count $hasEmbedded
+  }
   if(![string]::IsNullOrWhiteSpace($editorText) -and !$emptyComment -and !$emptyControl){throw '[JM_COPY_PENDING] 原生复制尚未完成，保留现有正文，未提交'}
  }
  if($q.action -eq 'focus-clear'){
