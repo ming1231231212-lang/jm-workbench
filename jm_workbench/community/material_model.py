@@ -48,6 +48,7 @@ class MaterialModel:
         instruction+='''\n最高优先级补充：history仅用于避重，不是网站事实证据，绝对不要沿用其中的功能和页面操作描述。文章主体写一个具体AI使用场景的方法、清单或可复现小实验，不写网站使用指南；不提本站有什么栏目、收录什么资源、有什么入口、是否需要登录。结尾只说本人维护趣造AI，希望大家一起使用并贡献具体反馈即可。不要把平台规则、提示词、其他平台应该怎么写等过程话术放进正文。不要声称亲测。文章链接按输入website_text逐字使用，网址后用中文句号或换行，不加英文点。评论不假定作者使用API、能设置温度参数或有快速响应开关。只按reply_count的数量回应给出的原帖，少于这个数也不能虚构来源；need_article为false时article必须为null。'''
         instruction+='\n除sources确实提供的内容外，不给出某软件存在的菜单或操作流程，不承诺代码直接可用或可合入主分支。优先写通用可验证的方法，评论中不确定的功能只提问。文章请围绕topic_focus，先提供独立的实用内容，最后自然介绍本人网站。'
         instruction+='\n评论先回应原帖的具体问题，body须自然包含anchor中的实际用词，例如原帖说思考几秒钟就回答，就讨论思考时长与回答质量；不能只说换版本、清除历史等任何帖子都能用的建议。文章topic_focus与评论无关，评论只能围绕对应source。'
+        if platform=='juejin':instruction+='\n掘金文章platform_tags仅使用已核实可选的人工智能，不使用AI工具或自行编造的标签。'
         focuses=['核对AI生成表格里的来源与缺失项','用AI整理资料时区分事实和推测','用脱敏样例比较AI工具是否合适','给AI编程任务写验收条件','检查AI摘要是否遗漏否定条件','整理提示词的输入和输出要求','AI工作流的失败记录与人工接手','核对AI生成的翻译中人名和数字']
         offset={'tieba':0,'juejin':2,'zhihu':4}.get(platform,0)
         focus=focuses[(int(hashlib.sha256(day.encode()).hexdigest()[:8],16)+offset)%len(focuses)]
@@ -56,6 +57,7 @@ class MaterialModel:
           'history':[b[:1100] for b in history[-45:]]})
         article=result.get('article')
         if isinstance(article,dict) and isinstance(article.get('body'),str):
+            if platform=='juejin':article['platform_tags']=['人工智能']
             if platform in ('juejin','zhihu') and not article.get('platform_tags'):article['platform_tags']=['人工智能']
             body=article['body']
             body=re.sub(r'^标题[:：][^\n]+\s*正文[:：]\s*','',body)

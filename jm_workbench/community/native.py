@@ -122,6 +122,7 @@ class NativePublisher:
             try:
                 self._click(ready['submit'], ready['url'])
                 receipt=verify_article(self, account, binding, payload)
+                receipt['platform_tags']=ready.get('platform_tags', [])
                 if hasattr(self.ui,'clear_draft'):self.ui.clear_draft()
                 return receipt
             except Exception as exc:

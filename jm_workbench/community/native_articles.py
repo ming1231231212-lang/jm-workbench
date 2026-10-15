@@ -282,6 +282,11 @@ def _tieba(p, s, url, payload, target):
 
 def prepare_article(p, account, binding, payload, target):
     platform = account['platform']; title = payload['title']; body = payload['body']
+    if platform == 'juejin':
+        # The generated topic label AI工具 is not a selectable Juejin tag.
+        # Use its verified parent topic; leave unknown tags subject to exact UI checks.
+        payload = {**payload, 'platform_tags': list(dict.fromkeys(
+            '人工智能' if tag == 'AI工具' else tag for tag in payload.get('platform_tags', [])))}
     if platform not in ('zhihu','juejin','tieba'): raise NativeStopped('此平台未实现本机文字文章准备')
     if '```' in body or re.search(r'<(?:iframe|script|img|video)\b', body, re.I):
         raise NativeStopped('本机执行器仅支持文字文章；复杂嵌入请使用网页发布')
@@ -327,7 +332,8 @@ def prepare_article(p, account, binding, payload, target):
         raise NativeStopped('提交前文章标题或完整正文改变，未提交')
     s = p._snapshot(url)
     submit = find(s, submit['name'], types=(submit['type'],)) if platform != 'tieba' else _tieba(p,s,url,payload,target)
-    return {'url':url,'submit':submit,'title':title,'body':body,'kind':'thread'}
+    return {'url':url,'submit':submit,'title':title,'body':body,'kind':'thread',
+            'platform_tags':list(payload.get('platform_tags', []))}
 
 
 def author_scope(s, binding, body):

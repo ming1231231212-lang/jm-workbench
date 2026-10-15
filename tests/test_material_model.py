@@ -26,3 +26,11 @@ def test_missing_disclosure_and_link_are_added_without_overwriting_generated_bod
     assert data['article']['body'].startswith(original)
     assert 'quzaoai.com' in data['article']['body'] and 'AI辅助' in data['article']['body']
     assert 'https://' not in data['article']['body']
+
+
+@pytest.mark.parametrize('platform,expected',[('juejin',['人工智能']),('zhihu',['人工智能','AI工具'])])
+def test_generated_tags_use_platform_verified_options(platform,expected):
+    model=MaterialModel(SimpleNamespace(values={}),transport=lambda *args:{'article':{
+        'title':'如何核对AI翻译','body':'用原文核对人名和数字。','platform_tags':['人工智能','AI工具']},'replies':[]})
+    data=model.generate(platform,'2026-10-16',[],[],True,0,'本人维护趣造AI')
+    assert data['article']['platform_tags']==expected and data['replies']==[]

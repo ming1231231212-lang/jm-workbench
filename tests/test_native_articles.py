@@ -128,6 +128,24 @@ def test_scope_does_not_match_controls_outside_the_publisher():
     assert inside(s,'submit','panel') and not inside(s,'other','panel')
 
 
+def test_juejin_existing_ai_tools_material_uses_verified_parent_tag_and_preserves_snapshot():
+    ui=ArticleUI('juejin');p=NativePublisher(ui,sleep=lambda _:None)
+    payload={'title':'核对AI翻译中的数字','body':'说明：本文使用AI辅助整理。核对数字与人名。',
+             'platform_tags':['人工智能','AI工具']}
+    ready=prepare_article(p,{'platform':'juejin'},{},payload,'人工智能')
+    assert ui.tags==ready['platform_tags']==['人工智能']
+    assert payload['platform_tags']==['人工智能','AI工具']
+    assert ui.body==payload['body'] and not ui.overwritten and ui.writes==0
+
+
+def test_juejin_unknown_tag_is_not_silently_removed():
+    ui=ArticleUI('juejin');ui.fail_tags=True
+    with pytest.raises(NativeStopped,match='实际标签选项未核对'):
+        prepare_article(NativePublisher(ui,sleep=lambda _:None,poll_attempts=1),{'platform':'juejin'},{},
+          {'title':'核对文章标签','body':'说明：本文使用AI辅助整理。','platform_tags':['未核实标签']},'人工智能')
+    assert not ui.tags and ui.writes==0
+
+
 def test_delayed_rich_editor_readback_rechecks_without_pasting_twice():
     class Delayed(ArticleUI):
         pastes=0
