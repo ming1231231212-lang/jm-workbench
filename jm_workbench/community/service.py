@@ -353,8 +353,9 @@ class Community:
         with self.store.connect(True) as db:
             current=db.execute('SELECT state,started,receipt FROM community_jobs WHERE id=?',(ident,)).fetchone()
             if current['state']!='unknown':raise ValueError('仅结果不明记录需要此处理')
+            receipt.update(previous_started=current['started'],previous_receipt=json.loads(current['receipt']))
             if outcome=='not_sent':
-                receipt.update(submitted=False,phase='resolved_not_sent',previous_started=current['started'],previous_receipt=json.loads(current['receipt']))
+                receipt.update(submitted=False,phase='resolved_not_sent')
                 db.execute('UPDATE community_jobs SET started=0 WHERE id=?',(ident,))
             db.execute('UPDATE community_jobs SET state=?,receipt=?,message=?,updated=? WHERE id=?',('recorded' if outcome=='submitted' else 'not_sent',dumps(receipt),'用户核实：'+note,self.clock(),ident))
         return {'message':'核实结果已记录，没有自动重发；平台暂停需单独处理'}

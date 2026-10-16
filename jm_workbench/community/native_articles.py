@@ -336,21 +336,64 @@ def prepare_article(p, account, binding, payload, target):
             'platform_tags':list(payload.get('platform_tags', []))}
 
 
-def author_scope(s, binding, body):
+def article_text(s, root, body):
+    """Read one content subtree in order, including split inline link labels."""
+    nodes=s.get('nodes',[])
+    links={n['key'] for n in nodes if n['type']=='Hyperlink'}
+    by={n['key']:n for n in nodes}
+    parts=[]
+    for n in nodes:
+        if n['key']==root or not inside(s,n['key'],root):continue
+        key=n.get('parent');nested=False;seen=set()
+        while key and key!=root and key not in seen:
+            seen.add(key)
+            if key in links:nested=True;break
+            key=by.get(key,{}).get('parent')
+        if nested:continue
+        if n['type']=='Text':parts.append(n.get('name',''))
+        elif n['type']=='Hyperlink':
+            href=link_destination(n.get('value',''))
+            # Preserve platform-added entity labels. Resolve authored URLs using
+            # their actual destinations, never by trusting a misleading label.
+            parts.append(href if re.match(r'https?://',href) and href in body else n.get('name',''))
+    return rendered(''.join(parts))
+
+
+def author_scope(s, binding, body, title=''):
     expected = {profile_key(u) for u in [binding['profile_url'], *binding.get('profile_aliases', [])]}
     by = {n['key']: n for n in s['nodes']}
-    paragraphs = [rendered(x) for x in body.split('\n') if len(rendered(x)) >= 20]
-    proofs = [n for n in s['nodes'] if n['type'] == 'Text' and rendered(n.get('name','')) in paragraphs]
+    wanted=rendered(body)
+    positions={n['key']:i for i,n in enumerate(s['nodes'])}
+    titles=[i for i,n in enumerate(s['nodes']) if title and rendered(n.get('name',''))==rendered(title)
+            and n['type'] in ('Text','Group','Document')]
+    # A paragraph may be split by an automatic entity link. Start from genuine
+    # body fragments, then require the entire body within one non-document scope.
+    proofs = [n for n in s['nodes'] if n['type'] == 'Text'
+              and rendered(n.get('name','')) and rendered(n.get('name','')) in wanted]
+    checked=set();cache={}
     for proof in proofs:
         key = proof.get('parent'); seen = set()
+        body_found=False
         while key and key not in seen:
             seen.add(key)
+            if by.get(key,{}).get('type')=='Document':break
+            if key not in cache:cache[key]=article_text(s,key,body)
+            body_found=body_found or wanted in cache[key]
+            if not body_found:
+                key=by.get(key,{}).get('parent');continue
+            if key in checked:break
+            checked.add(key)
             links = [n for n in s['nodes'] if n['type'] == 'Hyperlink' and n.get('visible') and inside(s,n['key'],key)]
             profiles = {profile_key(n.get('value','')) for n in links
                         if re.search(r'https://(?:www\.zhihu\.com/people/|juejin\.cn/user/|tieba\.baidu\.com/home/main\?)',n.get('value',''))}
             if profiles:
                 if profiles <= expected:
-                    return next(n['value'] for n in links if profile_key(n.get('value','')) in expected)
+                    owners=[n for n in links if profile_key(n.get('value','')) in expected]
+                    if title:
+                        preceding=[i for i in titles if i<positions[proof['key']]]
+                        if not preceding:break
+                        owners=[n for n in owners if max(preceding)<positions[n['key']]<positions[proof['key']]]
+                    if owners:return owners[0]['value']
                 break
             key = by.get(key,{}).get('parent')
     return None
@@ -403,7 +446,7 @@ def verify_article(p, account, binding, payload):
             if any(not published_url_present(s,value) for value in wanted):continue
             if rendered(payload['title']) not in text:continue
             if not all(rendered(para) in text or rendered(para) in semantic for para in payload['body'].split('\n') if rendered(para)):continue
-            author = author_scope(s,binding,payload['body'])
+            author = author_scope(s,binding,payload['body'],payload['title'])
             if author:
                 return {'url':url,'post_id':url.rsplit('/',1)[-1], 'visibility':'account_visible',
                         'author_url':author,'author_name':binding['name'],'title':payload['title'],'body':payload['body']}

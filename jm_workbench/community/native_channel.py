@@ -60,6 +60,15 @@ class NativeChromeChannel:
         temp.replace(self.path)
 
     @staticmethod
+    def same_result_redirect(before, after):
+        """Only Juejin's observed short-to-canonical URL for the same article."""
+        old,new=urlsplit(before),urlsplit(after)
+        return (old.scheme==new.scheme=='https' and old.netloc==new.netloc=='juejin.cn'
+                and not any((old.query,new.query,old.fragment,new.fragment))
+                and re.fullmatch(r'/spost/[1-9][0-9]{10,23}',old.path) is not None
+                and new.path==old.path.replace('/spost/','/post/',1))
+
+    @staticmethod
     def fingerprint(payload):
         return hashlib.sha256(json.dumps([payload['title'],payload['body']],ensure_ascii=False).encode()).hexdigest()
 
@@ -151,7 +160,7 @@ class NativeChromeChannel:
                 valid = valid or (old.hostname == new.hostname == 'juejin.cn' and old.path.startswith('/editor/drafts/') and re.fullmatch(r'/post/[1-9][0-9]{15,23}', new.path))
                 valid = valid or (old.hostname == new.hostname == 'juejin.cn' and old.path.startswith('/editor/drafts/') and new.path == '/published')
                 valid = valid or (old.hostname == new.hostname == 'juejin.cn' and old.path == '/published' and re.fullmatch(r'/post/[1-9][0-9]{15,23}',new.path))
-                valid = valid or (old.hostname == new.hostname == 'juejin.cn' and re.fullmatch(r'/spost/[1-9][0-9]{10,23}',old.path) and new.path==old.path.replace('/spost/','/post/',1))
+                valid = valid or self.same_result_redirect(self.expected,value)
                 valid = valid or (old.hostname == new.hostname == 'tieba.baidu.com' and old.path == '/f' and re.fullmatch(r'/p/[1-9][0-9]{3,23}', new.path))
             if not valid:
                 raise NativeStopped('页面没有按预期进入本次编辑或结果页，未接管其他页面')
@@ -187,7 +196,11 @@ class NativeChromeChannel:
         actual = self.raw('url')['url']
         if actual != self.state['url']:
             self.expected=self.state['url']
-            try:self.call('follow_editor')
+            try:
+                # A completed article may canonicalize after yesterday's receipt.
+                # Pending drafts/unknown submits must never use this to navigate away.
+                transition='follow_published' if not self.state.get('draft') and self.same_result_redirect(self.expected,actual) else 'follow_editor'
+                self.call(transition)
             except NativeStopped:
                 if not self.readonly_replacement:raise
                 self.release_tab();return self.call('open',**kwargs)
