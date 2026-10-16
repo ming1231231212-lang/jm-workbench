@@ -113,3 +113,19 @@ def test_known_result_reuse_survives_three_daily_channel_restarts(tmp_path):
         previous=Channel(path,old);previous.state={'key':'owned','url':old};previous.save()
         current=Channel(path,new);current.call('open',url=EDITOR)
         assert current.live==EDITOR and not any(a=='new' for a,_ in current.actions)
+
+
+@pytest.mark.parametrize('suffix,valid',[(' 审核中',True),(' 另一篇 审核中',False),(' 审核中更多内容',False)])
+def test_juejin_pending_badge_is_not_part_of_authored_title(suffix,valid):
+    s=split_article();profile='https://juejin.cn/user/1234567890123456'
+    s['url']='https://juejin.cn/spost/1234567890123456'
+    for n in s['nodes']:
+        if n.get('value')==PROFILE:n['value']=profile+'/posts'
+        if n['key']=='doc':n['name']=TITLE+'文章摘要 - 掘金'
+        if n['key']=='title':n['name']=TITLE+suffix
+    call=lambda:verify_article(NativePublisher(ReadOnlyResult(s),sleep=lambda _:None,poll_attempts=1),
+        {'platform':'juejin'},{'profile_url':profile,'name':'owner'},{'title':TITLE,'body':BODY})
+    if valid:
+        result=call();assert result['visibility']=='account_visible' and result['title']==TITLE
+    else:
+        with pytest.raises(NativeUnknown):call()

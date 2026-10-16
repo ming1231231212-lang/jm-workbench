@@ -364,7 +364,13 @@ def author_scope(s, binding, body, title=''):
     by = {n['key']: n for n in s['nodes']}
     wanted=rendered(body)
     positions={n['key']:i for i,n in enumerate(s['nodes'])}
-    titles=[i for i,n in enumerate(s['nodes']) if title and rendered(n.get('name',''))==rendered(title)
+    def heading(value):
+        # Juejin appends a separate moderation badge to the heading's UIA text.
+        # Strip only the observed, whitespace-delimited status on that platform.
+        if urlsplit(s.get('url','')).hostname=='juejin.cn':
+            value=re.sub(r'\s+审核中$', '', value)
+        return rendered(value)
+    titles=[i for i,n in enumerate(s['nodes']) if title and heading(n.get('name',''))==rendered(title)
             and n['type'] in ('Text','Group','Document')]
     # A paragraph may be split by an automatic entity link. Start from genuine
     # body fragments, then require the entire body within one non-document scope.

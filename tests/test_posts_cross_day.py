@@ -35,6 +35,10 @@ def test_three_days_three_platforms_restart_canonical_url_split_body_and_no_comm
             url={'tieba':'https://tieba.baidu.com/p/','juejin':'https://juejin.cn/post/','zhihu':'https://zhuanlan.zhihu.com/p/'}[platform]+ident
             snapshot=result_snapshot(a['native_binding']['profile_url'],p['title'],p['body'])
             snapshot['url']=url
+            if platform=='juejin':
+                snapshot['nodes'][0]['name']=p['title']+'正文摘要 - 掘金'
+                snapshot['nodes'][2]['name']=''
+                snapshot['nodes'].insert(3,dict(key='headline',parent='article',type='Text',name=p['title']+' 审核中',visible=True))
             if platform=='zhihu':
                 # The platform inserts entity links inside otherwise exact text.
                 for n in list(snapshot['nodes']):
