@@ -1,6 +1,6 @@
 from fastapi import APIRouter, Query
 from fastapi.responses import Response
-from .models import CommunityAccount, CommunityPost, LinkRecord, ResolveRecord, ClearRecord, DailyPlan, BackfillInput,NativeBindInput
+from .models import CommunityAccount, CommunityPost, LinkRecord, ResolveRecord, ClearRecord, DailyPlan, BackfillInput,BackfillRange,NativeBindInput
 
 
 def router(service):
@@ -11,19 +11,19 @@ def router(service):
 
     @api.post('/backfill/preview')
     def backfill_preview(payload:BackfillInput):
-        return {'items':service.backfill.preview(payload.plan_ids,payload.through_day,payload.replies_per_day)}
+        return {'items':service.backfill.preview(payload.plan_ids,payload.through_day,payload.replies_per_day,from_day=payload.from_day)}
 
     @api.post('/backfill/register')
     def backfill_register(payload:BackfillInput):
-        return service.backfill.register(payload.plan_ids,payload.through_day,payload.replies_per_day)
+        return service.backfill.register(payload.plan_ids,payload.through_day,payload.replies_per_day,from_day=payload.from_day)
 
     @api.post('/backfill/{ident}/prepare')
     def backfill_prepare(ident:str):
         return service.backfill.prepare(ident)
 
     @api.post('/backfill/{ident}/queue')
-    def backfill_queue(ident:str):
-        return service.backfill.queue(ident)
+    def backfill_queue(ident:str,payload:BackfillRange|None=None):
+        return service.backfill.queue(ident,**(payload.model_dump() if payload else {}))
 
     @api.post('/plans')
     def save_plan(payload:DailyPlan):return service.daily.save(payload)

@@ -187,4 +187,11 @@ class BackfillInput(BaseModel):
     model_config=ConfigDict(extra='forbid')
     plan_ids: list[str] = Field(min_length=1,max_length=10)
     through_day: date
+    from_day: date | None = None
     replies_per_day: int = Field(default=5,ge=0,le=5)
+
+
+class BackfillRange(BaseModel):
+    model_config=ConfigDict(extra='forbid')
+    from_day: date | None = None
+    through_day: date | None = None

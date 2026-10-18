@@ -42,14 +42,16 @@ class Backfill:
             coverage.setdefault((day, kind), []).append(dict(r))
         return coverage
 
-    def preview(self, plan_ids, through_day, replies_per_day=5, db=None):
+    def preview(self, plan_ids, through_day, replies_per_day=5, db=None, *, from_day=None):
         from .service import SHANGHAI
         if db is None:
             with self.store.connect() as conn:
-                return self.preview(plan_ids, through_day, replies_per_day, conn)
+                return self.preview(plan_ids, through_day, replies_per_day, conn,from_day=from_day)
         end = date.fromisoformat(str(through_day))
         today = datetime.fromtimestamp(self.s.clock(), SHANGHAI).date()
         if end >= today:raise ValueError('历史补录只包含昨天及之前；今天仍使用当日计划')
+        begin=date.fromisoformat(str(from_day)) if from_day is not None else None
+        if begin and begin>end:raise ValueError('历史补发起始日期不能晚于结束日期')
         if not 0 <= replies_per_day <= 5:raise ValueError('每日评论目标为0至5条')
         slots = []
         for ident in dict.fromkeys(plan_ids):
@@ -58,11 +60,13 @@ class Backfill:
             plan = dict(row);plan['payload'] = json.loads(plan['payload'])
             account = db.execute('SELECT data FROM community_accounts WHERE id=?', (plan['payload']['account_id'],)).fetchone()
             if not account:raise ValueError('原账号已删除')
-            if json.loads(account['data'])['platform'] not in ('tieba','juejin'):
-                raise ValueError('历史补录首批仅适用于已接入的贴吧和掘金计划')
+            if json.loads(account['data'])['platform'] not in ('tieba','juejin','zhihu'):
+                raise ValueError('历史补录仅适用于已接入的贴吧、掘金和知乎计划')
             if not db.execute('SELECT 1 FROM community_plan_days WHERE plan_id=?', (ident,)).fetchone():
                 raise ValueError('尚未开始执行的计划没有历史补发范围')
             start = datetime.fromtimestamp(plan['created'], SHANGHAI).date()
+            if plan['payload'].get('start_date'):start=max(start,date.fromisoformat(plan['payload']['start_date']))
+            if begin:start=max(start,begin)
             if (end-start).days > 90:raise ValueError('单次最多核对91天')
             coverage = self._coverage(db, plan)
             while start <= end:
@@ -79,14 +83,14 @@ class Backfill:
                 start += timedelta(days=1)
         return slots
 
-    def register(self, plan_ids, through_day, replies_per_day=5):
+    def register(self, plan_ids, through_day, replies_per_day=5, *, from_day=None):
         now = self.s.clock();created = 0
         with self.s.step_lock, self.store.connect(True) as db:
-            for slot in self.preview(plan_ids, through_day, replies_per_day, db):
+            for slot in self.preview(plan_ids, through_day, replies_per_day, db,from_day=from_day):
                 created += db.execute('''INSERT OR IGNORE INTO community_backfill
                     (id,plan_id,day,kind,slot,post_id,created,message) VALUES(?,?,?,?,?,?,?,?)''',
                     (uid(),slot['plan_id'],slot['day'],slot['kind'],slot['slot'],slot['post_id'],now,'历史缺口已登记，尚未补发')).rowcount
-            self._fill(db)
+            for ident in dict.fromkeys(plan_ids):self._fill(db,ident,from_day=from_day,through_day=through_day)
         return {'message':f'新增登记{created}项历史缺口；已有记录保持，未重复发帖或评论',
                 'created':created,'backfill':self.state()}
 
@@ -100,11 +104,13 @@ class Backfill:
                 if p.get('kind')=='reply':targets.add(t['destination'])
         return bodies, targets
 
-    def _fill(self, db, only_plan=None, candidates=()):
+    def _fill(self, db, only_plan=None, candidates=(), *, from_day=None,through_day=None):
         plans = {}
         for row in db.execute("SELECT * FROM community_backfill WHERE post_id='' ORDER BY day,kind,id").fetchall():
             r = dict(row)
             if only_plan and r['plan_id']!=only_plan:continue
+            if from_day is not None and r['day']<str(from_day):continue
+            if through_day is not None and r['day']>str(through_day):continue
             if r['plan_id'] not in plans:
                 p = self.s.daily.get(r['plan_id'])['payload']
                 a = self.s.account(p['account_id'])
@@ -185,9 +191,14 @@ class Backfill:
                 'submitted':sum(r['status']=='submitted' for r in items),
                 'with_content':sum(bool(r['post_id']) for r in items)}
 
-    def queue(self, plan_id, *, today_only=False):
+    def queue(self, plan_id, *, today_only=False,from_day=None,through_day=None):
         """Explicitly continue only proven-unsent history under the current revision."""
         from .service import revision,SHANGHAI
+        begin=date.fromisoformat(str(from_day)).isoformat() if from_day is not None else None
+        end=date.fromisoformat(str(through_day)).isoformat() if through_day is not None else None
+        today=datetime.fromtimestamp(self.s.clock(),SHANGHAI).date().isoformat()
+        if ((begin and begin>=today) or (end and end>=today) or (begin and end and begin>end)
+                or (today_only and (begin or end))):raise ValueError('历史补发日期范围无效；今天请使用当日计划')
         with self.s.step_lock:
             p=self.s.daily.get(plan_id)
             if p['state']!='enabled':raise ValueError('请先核验并启用原每日计划，再安排历史补发')
@@ -210,6 +221,7 @@ class Backfill:
                 else:
                     rows=db.execute("SELECT * FROM community_backfill WHERE plan_id=? AND post_id!='' ORDER BY CASE kind WHEN 'thread' THEN 0 ELSE 1 END,day,slot",(plan_id,)).fetchall()
                 for r in rows:
+                    if (begin and r['day']<begin) or (end and r['day']>end):continue
                     if r['kind']=='reply' and not p['payload'].get('replies_per_day',5):
                         skipped+=1;continue
                     db.execute('SAVEPOINT backfill_queue')
