@@ -405,6 +405,38 @@ def author_scope(s, binding, body, title=''):
     return None
 
 
+def flat_tieba_author(s, binding, body, title):
+    """Verify Tieba's flat UIA article using its local author and action boundary."""
+    u=urlsplit(s.get('url',''))
+    if u.scheme!='https' or u.netloc!='tieba.baidu.com' or not re.fullmatch(r'/p/[0-9]+',u.path):return None
+    nodes=s.get('nodes',[]);docs=[n for n in nodes if n['type']=='Document']
+    headings=[i for i,n in enumerate(nodes) if n['type']=='Text' and n.get('visible') and rendered(n.get('name',''))==rendered(title)]
+    if len(docs)!=1 or len(headings)!=1:return None
+    root=docs[0]['key'];start=headings[0];head=nodes[start]
+    end=next((i for i in range(start+1,len(nodes)) if nodes[i]['type'] in ('Text','Hyperlink')
+              and normalized(nodes[i].get('name','')) in ('转发','回复','点赞','全部回复')),None)
+    if end is None:return None
+    content=nodes[start+1:end]
+    if not any(n['type']=='Text' and n.get('parent')==root for n in content):return None
+    bounded={'nodes':[{'key':'article-proof','parent':'','type':'Group'},
+        *[{**n,'parent':'article-proof' if n.get('parent')==root else n.get('parent')} for n in content]]}
+    if rendered(body) not in article_text(bounded,'article-proof',body):return None
+    # The article's profile link carries fr=pb and sits just above its headline.
+    # The global "我的" menu has neither this role nor this position.
+    owners=[]
+    for n in nodes[max(0,start-16):start]:
+        if n['type']!='Hyperlink' or n.get('parent')!=root or not n.get('visible'):continue
+        v=urlsplit(n.get('value',''));q=parse_qs(v.query)
+        if v.scheme!='https' or v.netloc!='tieba.baidu.com' or v.path!='/home/main' or q.get('fr')!=['pb']:continue
+        rect=n.get('rect',[]);hr=head.get('rect',[])
+        if len(rect)!=4 or len(hr)!=4 or min(rect[2:]+hr[2:])<=0:continue
+        if not (hr[0]-24<=rect[0]<=hr[0]+400 and 0<hr[1]-rect[1]<=240):continue
+        owners.append(n)
+    expected=profile_key(binding['profile_url'])
+    if len(owners)!=1 or profile_key(owners[0]['value'])!=expected or normalized(owners[0]['name'])!=normalized(binding['name']):return None
+    return owners[0]['value']
+
+
 def published_url_present(s, url):
     links=[n for n in s['nodes'] if n['type']=='Hyperlink']
     if any(url in n.get('name','') and link_destination(n.get('value',''))!=url for n in links):return False
@@ -453,6 +485,7 @@ def verify_article(p, account, binding, payload):
             if rendered(payload['title']) not in text:continue
             if not all(rendered(para) in text or rendered(para) in semantic for para in payload['body'].split('\n') if rendered(para)):continue
             author = author_scope(s,binding,payload['body'],payload['title'])
+            if not author and platform=='tieba':author=flat_tieba_author(s,binding,payload['body'],payload['title'])
             if author:
                 return {'url':url,'post_id':url.rsplit('/',1)[-1], 'visibility':'account_visible',
                         'author_url':author,'author_name':binding['name'],'title':payload['title'],'body':payload['body']}
