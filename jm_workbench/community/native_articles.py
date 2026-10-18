@@ -134,6 +134,16 @@ def semantic_value(s, root, copied, html='',strict=True):
     return ''.join(parts) if parts else copied
 
 
+def same_article_text(value, expected):
+    """A bare hostname may be auto-linked to its own HTTP(S) root by an editor."""
+    wanted=normalized(expected);actual=normalized(value)
+    if actual==wanted:return True
+    domains=re.findall(r'(?<![A-Za-z0-9./:@-])([A-Za-z0-9-]+(?:\.[A-Za-z0-9-]+)*\.[A-Za-z]{2,})(?![A-Za-z0-9./:@?#%-])',expected)
+    for domain in set(domains):
+        actual=re.sub(r'https?://'+re.escape(domain)+r'/?(?=$|[^A-Za-z0-9./:@?#%_-])',domain,actual)
+    return actual==wanted
+
+
 def copy(p, node, url):
     p._snapshot(url)
     copied = p.ui.call('focus-copy', key=node['key'], expected_url=url)
@@ -147,9 +157,9 @@ def paste(p, node, url, text):
     # Clipboard reads may precede the browser's rich-link conversion. Re-read
     # the same editor only; never paste the body again or accept a partial match.
     for _ in range(3):
-        if normalized(value)==normalized(text):break
+        if same_article_text(value,text):break
         p.sleep(.5);value=copy(p,node,url)
-    if normalized(value) != normalized(text): raise NativeStopped('原生文章全文回读不一致，未提交')
+    if not same_article_text(value,text): raise NativeStopped('原生文章全文回读不一致，未提交')
 
 
 def editor(p):
@@ -314,10 +324,10 @@ def prepare_article(p, account, binding, payload, target):
     old_title,old_body=copy(p,title_node,url),copy(p,body_node,url)
     if resumed:
         for _ in range(3):
-            if normalized(old_title)==normalized(title) and normalized(old_body) in ('',normalized(body)):break
+            if normalized(old_title)==normalized(title) and (not normalized(old_body) or same_article_text(old_body,body)):break
             p.sleep(.5);s=editor(p);url=s['url'];title_node,body_node=fields(s,platform)
             old_title,old_body=copy(p,title_node,url),copy(p,body_node,url)
-    if (normalized(old_title) or normalized(old_body)) and (not resumed or normalized(old_title)!=normalized(title) or normalized(old_body) not in ('',normalized(body))):
+    if (normalized(old_title) or normalized(old_body)) and (not resumed or normalized(old_title)!=normalized(title) or (normalized(old_body) and not same_article_text(old_body,body))):
         if resumed and hasattr(p.ui,'record_editor_mismatch'):p.ui.record_editor_mismatch(payload,old_title,old_body)
         raise NativeStopped('文章编辑器已有内容，已保留原稿，未提交')
     if hasattr(p.ui,'mark_draft'):p.ui.mark_draft(payload)
@@ -328,7 +338,7 @@ def prepare_article(p, account, binding, payload, target):
     s = editor(p); url = s['url']
     submit = _zhihu(p,s,url,payload) if platform == 'zhihu' else _juejin(p,s,url,payload,target) if platform == 'juejin' else _tieba(p,s,url,payload,target)
     s = p._snapshot(url); title_node, body_node = fields(s, platform)
-    if normalized(copy(p,title_node,url)) != normalized(title) or normalized(copy(p,body_node,url)) != normalized(body):
+    if normalized(copy(p,title_node,url)) != normalized(title) or not same_article_text(copy(p,body_node,url),body):
         raise NativeStopped('提交前文章标题或完整正文改变，未提交')
     s = p._snapshot(url)
     submit = find(s, submit['name'], types=(submit['type'],)) if platform != 'tieba' else _tieba(p,s,url,payload,target)
