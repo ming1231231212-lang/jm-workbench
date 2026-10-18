@@ -116,11 +116,17 @@ $script:seen=[System.Collections.Generic.HashSet[string]]::new()
 $script:nodes=[System.Collections.Generic.List[object]]::new()
 $script:elements=@{}
 $script:stopAtDocument=$false
+function Get-JmControlType($current){
+ if(!$current -or !$current.ControlType -or !$current.ControlType.ProgrammaticName){
+  throw '[JM_DESKTOP_WAIT] 网页控件正在更新，读取未完成'
+ }
+ return $current.ControlType.ProgrammaticName.Replace('ControlType.','')
+}
 function Walk($e,$depth,$parent=''){
  if($depth -gt 45 -or $script:nodes.Count -ge 3500){return}
  $key=$e.GetRuntimeId() -join ','
  if(!$script:seen.Add($key)){return}
- $c=$e.Current;$type=$c.ControlType.ProgrammaticName.Replace('ControlType.','')
+ $c=$e.Current;$type=Get-JmControlType $c
  if($script:stopAtDocument -and $type -eq 'Document'){return}
  if($c.Name -or $c.AutomationId -or $type -in @('Edit','CheckBox','TabItem','Group')){
   $value='';$hasValue=$false;try{$value=$e.GetCurrentPattern([System.Windows.Automation.ValuePattern]::Pattern).Current.Value;$hasValue=$true}catch{}

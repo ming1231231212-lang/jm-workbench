@@ -15,6 +15,32 @@ from jm_workbench.community.models import DailyPlan
 from test_community_daily import setup_plan
 
 
+def test_powershell_loading_control_is_classified_as_transient(tmp_path):
+    shell=shutil.which('pwsh') or shutil.which('powershell')
+    if not shell:pytest.skip('Windows PowerShell unavailable')
+    runner=tmp_path/'control-type.ps1'
+    runner.write_text(r'''
+    $ErrorActionPreference='Stop';$tokens=$null;$errors=$null
+    $ast=[Management.Automation.Language.Parser]::ParseFile($args[0],[ref]$tokens,[ref]$errors)
+    if($errors.Count){throw 'parse failed'}
+    $fn=$ast.Find({param($n) $n -is [Management.Automation.Language.FunctionDefinitionAst] -and $n.Name -eq 'Get-JmControlType'},$true)
+    if(!$fn){throw 'control type classifier missing'}
+    . ([scriptblock]::Create($fn.Extent.Text))
+    $results=@()
+    foreach($item in @($null,[pscustomobject]@{ControlType=$null},[pscustomobject]@{ControlType=[pscustomobject]@{ProgrammaticName=$null}})){
+      try{Get-JmControlType $item;throw 'unexpected success'}catch{
+        if($_.Exception.Message -notlike '*[[]JM_DESKTOP_WAIT]*'){throw}
+        $results+='transient'
+      }
+    }
+    $results+=(Get-JmControlType ([pscustomobject]@{ControlType=[pscustomobject]@{ProgrammaticName='ControlType.Edit'}}))
+    $results|ConvertTo-Json -Compress
+    ''',encoding='utf-8-sig')
+    r=subprocess.run([shell,'-NoProfile','-File',str(runner),str(Path('scripts/native_chrome.ps1').resolve())],capture_output=True,timeout=30)
+    assert r.returncode==0,r.stderr.decode('utf-8',errors='replace')
+    assert json.loads(r.stdout)==['transient','transient','transient','Edit']
+
+
 def test_real_powershell_empty_control_rule_rejects_text_and_embedded_content():
     script=Path('scripts/native_chrome.ps1').resolve()
     shell=shutil.which('pwsh') or shutil.which('powershell')
