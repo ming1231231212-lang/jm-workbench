@@ -4,7 +4,7 @@ import subprocess
 from types import SimpleNamespace
 
 from jm_workbench.community.native_channel import NativeChromeChannel
-from jm_workbench.community.native import NativeStopped
+from jm_workbench.community.native import NativeStopped, NativeTransient
 
 
 class Channel(NativeChromeChannel):
@@ -169,3 +169,25 @@ def test_closed_unsent_draft_restores_from_job_without_touching_other_tabs(tmp_p
     ui.call('open',url='https://zhuanlan.zhihu.com/write')
     assert ui.state['key']=='owned' and ui.state['window']==1
     assert not any(a in ('click','close') for a,_ in ui.actions)
+
+
+def test_new_daily_article_replaces_repurposed_completed_tab_without_overwriting_it(tmp_path):
+    ui=Channel(tmp_path/'tab.json','https://www.zhihu.com/people/fixture')
+    ui.state={'key':'yesterday','url':'https://zhuanlan.zhihu.com/p/123456','window':1,'process_id':2,'process_started':'same'}
+    ui.preflight_replacement=True
+    ui.call('open',url='https://zhuanlan.zhihu.com/write')
+    assert ui.state['key']=='owned' and ui.state['window']==1
+    assert sum(a=='new' for a,_ in ui.actions)==1
+    assert not any(a in ('close','click','paste') for a,_ in ui.actions)
+    assert [kw['expected_url'] for a,kw in ui.actions if a=='navigate']==['chrome://newtab/']
+
+
+def test_changed_tab_with_unsent_draft_is_kept_and_diagnostic_is_saved(tmp_path):
+    ui=Channel(tmp_path/'tab.json','https://www.zhihu.com/people/fixture')
+    original={'key':'owned','url':'https://zhuanlan.zhihu.com/p/123456/edit','draft':'keep','window':1,'process_id':2,'process_started':'same'}
+    ui.state=original.copy();ui.expected=original['url'];ui.preflight_replacement=True
+    with pytest.raises(NativeTransient):ui.call('open',url='https://zhuanlan.zhihu.com/write')
+    assert ui.state==original and not any(a in ('new','navigate','click','paste') for a,_ in ui.actions)
+    data=json.loads(ui.path.with_suffix('.navigation.json').read_text())
+    assert data[-1]['expected']=='https://zhuanlan.zhihu.com/p/123456/edit'
+    assert data[-1]['actual']=='https://www.zhihu.com/people/fixture'

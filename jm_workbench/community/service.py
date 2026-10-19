@@ -484,6 +484,8 @@ class Community:
                 if hasattr(self.adapter,'ensure_connection'):self.adapter.ensure_connection(a)
                 identity=self.adapter.check(a,a['_secret'])
             except IdentityChanged:raise
+            except (RetryablePreflight,PreflightStopped) as ex:
+                raise RetryablePreflight(str(ex)) from None
             except Exception:
                 raise RetryablePreflight('原账号连接或登录预检尚未完成，未提交；将自动重查，网页验证需本人完成') from None
             if identity!=s['account']['identity']:raise IdentityChanged('登录身份已变化，未提交；请检查原账号')
@@ -502,10 +504,12 @@ class Community:
         except RetryablePreflight as ex:
             status,message='queued',str(ex)
             old=json.loads(job['receipt']);attempt=old.get('retry_attempt',0)+1
-            receipt={'phase':'preflight','submitted':False,'retry_attempt':attempt}
+            history=old.get('preflight_history',[])+[{'message':message,'at':self.clock()}]
+            receipt={'phase':'preflight','submitted':False,'retry_attempt':attempt,'preflight_history':history[-20:]}
         except PreflightStopped as ex:
             status,message='failed',str(ex)
-            receipt={'phase':'preflight','submitted':False}
+            old=json.loads(job['receipt'])
+            receipt={'phase':'preflight','submitted':False,'preflight_history':(old.get('preflight_history',[])+[{'message':message,'at':self.clock()}])[-20:]}
         except NotSubmitted as ex:
             status,message='failed',str(ex)
         except TimeoutError:

@@ -5,6 +5,7 @@ import os
 import re
 import shutil
 import subprocess
+import time
 from pathlib import Path
 from urllib.parse import urlsplit
 
@@ -19,6 +20,7 @@ class NativeChromeChannel:
         self.expected = ''
         self.redirects = []
         self.readonly_replacement = False
+        self.preflight_replacement = False
         self.replaced = False
         self.state = json.loads(self.path.read_text(encoding='utf-8')) if self.path.exists() else {}
         self.expected=self.state.get('url','')
@@ -58,6 +60,19 @@ class NativeChromeChannel:
         temp = self.path.with_suffix('.tmp')
         temp.write_text(json.dumps(self.state, ensure_ascii=False), encoding='utf-8')
         temp.replace(self.path)
+
+    def record_navigation_mismatch(self, action, value):
+        path=self.path.with_suffix('.navigation.json')
+        try:history=json.loads(path.read_text(encoding='utf-8'))
+        except (OSError,ValueError):history=[]
+        # Do not persist arbitrary URL query strings or credentials from another page.
+        def safe(url):
+            u=urlsplit(url)
+            return u.scheme+'://'+(u.hostname or '')+u.path
+        history.append({'at':time.time(),'action':action,'expected':safe(self.expected),
+                        'actual':safe(value),'draft_preserved':bool(self.state.get('draft'))})
+        path.parent.mkdir(parents=True,exist_ok=True)
+        path.write_text(json.dumps(history[-20:],ensure_ascii=False,indent=2),encoding='utf-8')
 
     @staticmethod
     def same_result_redirect(before, after):
@@ -163,7 +178,8 @@ class NativeChromeChannel:
                 valid = valid or self.same_result_redirect(self.expected,value)
                 valid = valid or (old.hostname == new.hostname == 'tieba.baidu.com' and old.path == '/f' and re.fullmatch(r'/p/[1-9][0-9]{3,23}', new.path))
             if not valid:
-                raise NativeStopped('页面没有按预期进入本次编辑或结果页，未接管其他页面')
+                self.record_navigation_mismatch(action,value)
+                raise NativeTransient('本任务标签页已变化，未覆盖其他页面；尚未提交时等待恢复，提交后只核验回执')
             self.expected = value; self.state['url'] = value; self.save()
             return self.raw('snapshot', expected_url=value)
         if action != 'open':
@@ -202,7 +218,7 @@ class NativeChromeChannel:
                 transition='follow_published' if not self.state.get('draft') and self.same_result_redirect(self.expected,actual) else 'follow_editor'
                 self.call(transition)
             except NativeStopped:
-                if not self.readonly_replacement:raise
+                if not self.readonly_replacement and not (self.preflight_replacement and not self.state.get('draft')):raise
                 self.release_tab();return self.call('open',**kwargs)
             actual=self.state['url']
         if self.state.get('draft') and url!=actual:

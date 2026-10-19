@@ -75,6 +75,10 @@ class NativeRuntime:
     def publish(self,account,payload,target):
         with desktop_lock(self.config.home):
             publisher=self.publisher(account,payload,target);entered=False
+            # Only a new article with no unresolved draft may replace yesterday's
+            # repurposed task tab. The existing tab and browser profile stay intact.
+            if hasattr(publisher,'ui') and payload.get('kind','thread')=='thread':
+                publisher.ui.preflight_replacement=True
             reserve=publisher.before_submit
             def mark_submission():
                 nonlocal entered

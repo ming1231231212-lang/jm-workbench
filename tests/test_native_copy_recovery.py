@@ -129,3 +129,21 @@ def test_transient_failure_keeps_daily_plan_and_recovers_same_job(ctx,monkeypatc
     after=s.store.rows('SELECT * FROM community_jobs')
     assert len(after)==1 and after[0]['id']==jobs[0]['id'] and after[0]['state']=='submitted'
     assert len(f.sent)==1 and s.daily.get(p)['state']=='enabled'
+
+
+def test_navigation_preflight_keeps_retry_history_and_never_overrides_user_pause(ctx):
+    s,f,a,n=ctx;p=setup_plan(ctx)
+    s.daily.control(p,'pause');d=s.daily.get(p)['payload'];d['replies_per_day']=0
+    s.daily.save(DailyPlan(**d),p);s.daily.control(p,'enable');s.daily.prepare(p)
+    def changed(*_):raise RetryablePreflight('本任务标签页已变化，未提交')
+    f.publish=changed
+    for attempt in range(2):
+        s.tick();j=s.store.rows('SELECT * FROM community_jobs')[0]
+        assert j['state']=='queued' and j['started']==0
+        assert len(json.loads(j['receipt'])['preflight_history'])==attempt+1
+        n[0]=j['due']
+    assert s.daily.get(p)['state']=='enabled' and not s.state()['risk']
+    s.daily.control(p,'pause');before=s.store.rows('SELECT * FROM community_jobs')
+    s.recover();n[0]+=86400;s.tick()
+    assert s.store.rows('SELECT * FROM community_jobs')==before
+    assert s.daily.get(p)['state']=='paused' and not f.sent
