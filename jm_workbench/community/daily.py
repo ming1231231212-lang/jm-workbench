@@ -51,6 +51,31 @@ class DailyPlans:
         if not rows:raise ValueError('每日计划不存在')
         r=rows[0];r['payload']=json.loads(r['payload']);return r
 
+    def day_jobs(self,p,day,*,scheduled=False):
+        """Execution-day progress, while the original plan item stays immutable."""
+        from .service import SHANGHAI
+        rows=self.store.rows('''SELECT i.kind,i.day,i.post_id,j.state,j.started,j.updated,j.receipt
+            FROM community_plan_items i JOIN community_jobs j ON j.post_id=i.post_id
+            WHERE i.plan_id=? AND j.account_id=? AND j.rowid=(SELECT x.rowid FROM community_jobs x
+              WHERE x.post_id=j.post_id AND x.account_id=j.account_id ORDER BY x.created DESC,x.rowid DESC LIMIT 1)''',
+            (p['id'],p['payload']['account_id']))
+        result=[]
+        for row in rows:
+            effective=row['day']
+            if not scheduled and row['state'] in ('submitted','recorded') and json.loads(row['receipt']).get('url'):
+                stamp=row['started'] if row['state']=='submitted' else row['updated']
+                if stamp>0:effective=datetime.fromtimestamp(stamp,SHANGHAI).date().isoformat()
+            if effective==day:result.append(row)
+        return result
+
+    @staticmethod
+    def counts(jobs):
+        return {k:{'planned':sum(j['kind']==k for j in jobs),
+            'submitted':sum(j['kind']==k and j['state']=='submitted' for j in jobs),
+            'recorded':sum(j['kind']==k and j['state']=='recorded' for j in jobs),
+            'waiting':sum(j['kind']==k and j['state'] in ('queued','paused') for j in jobs),
+            'failed':sum(j['kind']==k and j['state'] in ('failed','unknown') for j in jobs)} for k in ('thread','reply')}
+
     def state(self):
         plans=[]
         for row in self.store.rows('SELECT id FROM community_plans ORDER BY created DESC'):
@@ -62,12 +87,8 @@ class DailyPlans:
             for d in days:
                 checks=self.store.rows('SELECT next_check,attempts,reply_goal FROM community_plan_checks WHERE plan_id=? AND day=?',(p['id'],d['day']))
                 d.update(checks[0] if checks else {'next_check':0,'attempts':0,'reply_goal':5})
-                jobs=self.store.rows('''SELECT i.kind,j.state FROM community_plan_items i JOIN community_jobs j ON j.post_id=i.post_id
-                    WHERE i.plan_id=? AND i.day=? AND j.account_id=?
-                    AND j.rowid=(SELECT x.rowid FROM community_jobs x WHERE x.post_id=j.post_id AND x.account_id=j.account_id ORDER BY x.created DESC,x.rowid DESC LIMIT 1)''',(p['id'],d['day'],p['payload']['account_id']))
-                d['counts']={k:{'planned':sum(j['kind']==k for j in jobs),'submitted':sum(j['kind']==k and j['state']=='submitted' for j in jobs),
-                   'recorded':sum(j['kind']==k and j['state']=='recorded' for j in jobs),
-                   'waiting':sum(j['kind']==k and j['state'] in ('queued','paused') for j in jobs),'failed':sum(j['kind']==k and j['state'] in ('failed','unknown') for j in jobs)} for k in ('thread','reply')}
+                d['counts']=self.counts(self.day_jobs(p,d['day']))
+                d['scheduled_counts']=self.counts(self.day_jobs(p,d['day'],scheduled=True))
             p['platform']=self.s.account(p['payload']['account_id'])['platform'];p['days']=days
             p['preparations']=self.s.materials.state(p['id']) if hasattr(self.s,'materials') else []
             for batch in p['preparations']:
@@ -182,7 +203,7 @@ class DailyPlans:
                   AND ((j.state='submitted' AND j.started>=? AND j.started<?)
                    OR (j.state='recorded' AND j.updated>=? AND j.updated<?))""",
                 (a['id'],a['platform'],a['identity'],'manual:'+a['id'],midnight,midnight+86400,midnight,midnight+86400)))
-            linked=0
+            linked=0;attributed=0
             for row in rows:
                 receipt=json.loads(row['receipt'])
                 if not receipt.get('url'):continue
@@ -194,8 +215,9 @@ class DailyPlans:
                 payload=snapshot['payload'];kind=payload.get('kind','thread')
                 if kind not in ('thread','reply'):continue
                 linked+=db.execute('INSERT OR IGNORE INTO community_plan_items VALUES(?,?,?,?,?)',(ident,day,kind,material_id(payload['body']),row['post_id'])).rowcount
-            if linked:
-                db.execute("INSERT INTO community_plan_days VALUES(?,?,'planned','已关联当天实际发布记录；按原回执区分已提交和网页登记',?,?) ON CONFLICT(plan_id,day) DO UPDATE SET message=excluded.message,updated=excluded.updated",(ident,day,now,now))
+                if db.execute('SELECT 1 FROM community_plan_items WHERE plan_id=? AND post_id=?',(ident,row['post_id'])).fetchone():attributed+=1
+            if attributed:
+                db.execute("INSERT INTO community_plan_days VALUES(?,?,'planned','按当天实际发布回执统计；原计划日期保留在内容详情',?,?) ON CONFLICT(plan_id,day) DO UPDATE SET message=excluded.message,updated=excluded.updated",(ident,day,now,now))
             return {'message':f'已将 {linked} 条当天真实回执关联到计划；没有新建或重复发布内容','linked':linked}
 
     def tick(self):
@@ -267,7 +289,7 @@ class DailyPlans:
                 used={r['material'] for r in self.store.rows('SELECT material FROM community_plan_items WHERE plan_id=?',(ident,))}
                 used.update(material_id(json.loads(r['payload'])['body']) for r in self.store.rows('SELECT p.payload FROM community_backfill b JOIN community_posts p ON p.id=b.post_id WHERE b.plan_id=?',(ident,)))
                 targets={r['value'] for r in self.store.rows("SELECT value FROM community_claims WHERE platform=? AND identity=? AND scope='reply_target'",(a['platform'],a['identity']))}
-                existing=self.store.rows('SELECT kind FROM community_plan_items WHERE plan_id=? AND day=?',(ident,day))
+                existing=self.day_jobs(p,day)
                 created={k:sum(r['kind']==k for r in existing) for k in ('thread','reply')}
                 errors=[]
                 reply_goal=d.get('replies_per_day',5)

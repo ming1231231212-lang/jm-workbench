@@ -1,5 +1,6 @@
 """Reconcile real receipts without sending or rewriting historical outcomes."""
 import json
+import pytest
 from datetime import datetime
 from jm_workbench.community.models import CommunityPost, DailyPlan
 from jm_workbench.community.service import SHANGHAI
@@ -134,3 +135,26 @@ def test_explicit_not_sent_resolution_keeps_audit_and_allows_only_explicit_conti
     s.daily.control(p,'enable');assert s.daily.control(p,'continue-today')['queued']==6
     assert len(s.store.rows('SELECT * FROM community_backfill_continuations'))==6
     assert not f.sent
+
+
+@pytest.mark.parametrize('outcome',['submitted','recorded'])
+def test_historical_post_counts_on_actual_send_day_without_moving_original_item(ctx,outcome):
+    s,f,a,n=ctx;n[0]=datetime(2026,10,17,1,0,tzinfo=SHANGHAI).timestamp();s.check_account(a)
+    d=config(a);d.hour=1;d.replies_per_day=0;p=s.daily.save(d)['id'];s.daily.control(p,'enable')
+    s.daily.prepare(p,force=True)
+    original=s.store.rows('SELECT * FROM community_plan_items')
+    n[0]=datetime(2026,10,19,9,0,tzinfo=SHANGHAI).timestamp()
+    with s.store.connect(True) as db:
+        db.execute("UPDATE community_jobs SET state=?,started=?,updated=?,receipt=?",(outcome,n[0] if outcome=='submitted' else 0,n[0],json.dumps({'url':'https://tieba.baidu.com/p/1234567'})))
+    before=s.store.rows('SELECT * FROM community_jobs')
+    s.daily.sync_receipts(p);s.daily.sync_receipts(p);s.daily.prepare(p,force=True)
+    state=s.daily.state()[0];today=next(d for d in state['days'] if d['day']=='2026-10-19')
+    assert today['counts']['thread'][outcome]==1
+    assert today['counts']['thread']['planned']==1
+    assert today['counts']['reply']['planned']==0
+    assert today['scheduled_counts']['thread']['planned']==0
+    assert s.store.rows('SELECT * FROM community_plan_items')==original
+    assert s.store.rows('SELECT * FROM community_jobs')==before and not f.sent
+    s.recover();assert next(d for d in s.daily.state()[0]['days'] if d['day']=='2026-10-19')['counts']==today['counts']
+    n[0]=datetime(2026,10,20,1,0,tzinfo=SHANGHAI).timestamp()
+    assert s.daily.day_jobs(s.daily.get(p),'2026-10-20')==[]
