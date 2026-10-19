@@ -137,6 +137,17 @@ test("today progress does not borrow yesterday totals", () => {
   assert.equal(planProgress(plan, "2026-10-05").reply.submitted, 0);
 });
 
+test("cross-day receipt distinguishes actual submission from original plan date", () => {
+  const post={id:'catchup',created:1,state:'active',plan_id:plan.id,plan_day:'2026-10-17',payload:{kind:'thread',title:'Catchup',body:'Original body',targets:[]},
+    jobs:[{id:'sent',platform:'tieba',state:'submitted',started:1792380000,receipt:{url:'https://tieba.baidu.com/p/123456',visibility:'account_visible'}}]};
+  const d={...data,posts:[post],plans:[plan]};
+  assert.ok(drawer(d,{drawer:{type:'content',id:'catchup'}}).includes('实际提交：'));
+  assert.ok(drawer(d,{drawer:{type:'plan',id:plan.id},drawerTab:'content'}).includes('原计划 2026-10-17'));
+  assert.ok(drawer(d,{drawer:{type:'plan',id:plan.id},drawerTab:'summary'}).includes('按实际发送日期'));
+  post.jobs[0].state='unknown';
+  assert.ok(!drawer(d,{drawer:{type:'content',id:'catchup'}}).includes('实际提交：'));
+});
+
 test("registered receipts count in plan progress without claiming automated acceptance", () => {
   const p={...plan,payload:{...plan.payload,name:"Daily",board:"ai",hour:1,minute:0,source_boards:[]},
     days:[{day:"2026-10-14",counts:{thread:{submitted:0,recorded:1},reply:{submitted:0,recorded:5}}}]};
