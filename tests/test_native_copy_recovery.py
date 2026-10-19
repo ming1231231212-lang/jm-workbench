@@ -147,3 +147,18 @@ def test_navigation_preflight_keeps_retry_history_and_never_overrides_user_pause
     s.recover();n[0]+=86400;s.tick()
     assert s.store.rows('SELECT * FROM community_jobs')==before
     assert s.daily.get(p)['state']=='paused' and not f.sent
+
+
+def test_successful_recovery_still_explains_earlier_preflight_delay(ctx):
+    s,f,a,n=ctx;p=setup_plan(ctx)
+    s.daily.control(p,'pause');d=s.daily.get(p)['payload'];d['replies_per_day']=0
+    s.daily.save(DailyPlan(**d),p);s.daily.control(p,'enable');s.daily.prepare(p)
+    original=f.publish
+    def wait(*_):raise RetryablePreflight('日常Chrome暂不可交互，未提交')
+    f.publish=wait;s.tick();job=s.store.rows('SELECT * FROM community_jobs')[0]
+    history=json.loads(job['receipt'])['preflight_history']
+    n[0]=job['due'];f.publish=original;s.tick()
+    result=s.store.rows('SELECT * FROM community_jobs')[0]
+    assert result['state']=='submitted'
+    assert json.loads(result['receipt'])['preflight_history']==history
+    assert len(f.sent)==1

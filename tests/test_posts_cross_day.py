@@ -33,6 +33,17 @@ def test_three_days_three_platforms_restart_canonical_url_split_body_and_no_comm
                 tab.state['url']='https://juejin.cn/spost/'+ident;tab.save()
                 self.live[platform]='https://juejin.cn/post/'+ident
             url={'tieba':'https://tieba.baidu.com/p/','juejin':'https://juejin.cn/post/','zhihu':'https://zhuanlan.zhihu.com/p/'}[platform]+ident
+            if platform in ('tieba','zhihu'):
+                path=tmp_path/(platform+'-daily-tab.json')
+                compose='https://tieba.baidu.com/f?kw=fixture' if platform=='tieba' else 'https://zhuanlan.zhihu.com/write'
+                tab=Channel(path,self.live.get(platform,compose))
+                if not path.exists():tab.state={'key':'owned','url':compose,'window':1,'process_id':2,'process_started':'same'};tab.save()
+                tab.preflight_replacement=True;tab.call('open',url=compose)
+                assert tab.live==compose
+                assert sum(action=='new' for action,_ in tab.actions)==int(platform in self.live)
+                tab.state['url']=url;tab.save()
+                # Next day the same completed task tab has been used for the profile.
+                self.live[platform]=a['native_binding']['profile_url']
             snapshot=result_snapshot(a['native_binding']['profile_url'],p['title'],p['body'])
             snapshot['url']=url
             if platform=='juejin':

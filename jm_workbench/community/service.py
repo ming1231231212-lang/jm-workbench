@@ -493,7 +493,7 @@ class Community:
             current=self.store.rows('SELECT message FROM community_jobs WHERE id=?',(job['id'],))[0]
             if current['message'] in ('stop_requested','cancel_requested'):raise InterruptedError(current['message'])
             with self.store.connect(True) as db:
-                db.execute("UPDATE community_jobs SET message='正在提交并等待平台回执（最长3分钟）',updated=? WHERE id=?",(self.clock(),job['id']))
+                db.execute("UPDATE community_jobs SET message='正在准备内容并等待平台回执',updated=? WHERE id=?",(self.clock(),job['id']))
             a['_native_job_id']=job['id']
             receipt=self.adapter.publish(a,a['_secret'],s['payload'],s['destination'])
             if not receipt.get('post_id') or not receipt.get('url'):raise RuntimeError('missing receipt')
@@ -521,6 +521,9 @@ class Community:
             if status=='unknown':
                 reserved=json.loads(db.execute('SELECT receipt FROM community_jobs WHERE id=?',(job['id'],)).fetchone()['receipt'])
                 if reserved.get('phase')=='native_submit_reserved':receipt={**receipt,**reserved}
+            if status in ('submitted','unknown'):
+                history=json.loads(job['receipt']).get('preflight_history',[])
+                if history:receipt.setdefault('preflight_history',history[-20:])
             if status=='queued':
                 current=db.execute('SELECT message FROM community_jobs WHERE id=?',(job['id'],)).fetchone()
                 plan=db.execute('SELECT p.state FROM community_plan_items i JOIN community_plans p ON p.id=i.plan_id WHERE i.post_id=?',(job['post_id'],)).fetchone()
