@@ -504,12 +504,16 @@ class Community:
         except RetryablePreflight as ex:
             status,message='queued',str(ex)
             old=json.loads(job['receipt']);attempt=old.get('retry_attempt',0)+1
-            history=old.get('preflight_history',[])+[{'message':message,'at':self.clock()}]
+            entry={'message':message,'at':self.clock()}
+            if getattr(ex,'local_error',None):entry['local_error']=ex.local_error
+            history=old.get('preflight_history',[])+[entry]
             receipt={'phase':'preflight','submitted':False,'retry_attempt':attempt,'preflight_history':history[-20:]}
         except PreflightStopped as ex:
             status,message='failed',str(ex)
             old=json.loads(job['receipt'])
-            receipt={'phase':'preflight','submitted':False,'preflight_history':(old.get('preflight_history',[])+[{'message':message,'at':self.clock()}])[-20:]}
+            entry={'message':message,'at':self.clock()}
+            if getattr(ex,'local_error',None):entry['local_error']=ex.local_error
+            receipt={'phase':'preflight','submitted':False,'preflight_history':(old.get('preflight_history',[])+[entry])[-20:]}
         except NotSubmitted as ex:
             status,message='failed',str(ex)
         except TimeoutError:

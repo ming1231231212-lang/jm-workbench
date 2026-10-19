@@ -85,3 +85,9 @@ planning-with-files记录持续计划；brainstorming梳理架构；find-skills�
 - 贴吧已完成一次提交，原账号完整正文核验成功，回执已由工作台自动生成；知乎补发处理中。真实链接/账号资料仅保存在outputs/var。
 
 最终实机结果：两个原任务经页面恢复后均成功单次提交，原账号全文回执自动生成；跨日进度、实际提交时间与明日安排已在正式UI及日常Chrome核验。成功后清除当日过期next_check，未完成目标不清除。未来仍依赖日常Chrome登录与可交互桌面，平台审核/未登录可见性没有扩大承诺。
+
+## 2026-10-20 知乎PermissionError证据
+
+- 今日01:05:50失败，receipt.phase=preflight/submitted=false/started=0；通用PermissionError被runtime转为PreflightStopped，service自动暂停同平台计划。
+- 原生publish.json最后修改01:05:48，固定publish.tmp遗留01:05:50，二者SHA256完全相同；全部原生Python路径中，状态保存的temp.replace为该时刻最吻合的失败点。旧日志未保存异常堆栈，无法识别占用进程，不能声称已证明杀毒或其他程序。
+- raw每次只读快照也无条件重写相同状态，放大Windows替换文件遇占用的机会。需要无变化不写、唯一临时文件、短暂占用有限重试；提交前仍失败由队列退避，不暂停平台。

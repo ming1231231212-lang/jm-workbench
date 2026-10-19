@@ -3,6 +3,7 @@ import contextlib
 import json
 import os
 import time
+import traceback
 from datetime import datetime
 from pathlib import Path
 
@@ -11,6 +12,20 @@ from ..core.db import Store,dumps
 from .adapters import PreflightStopped,RetryablePreflight,IdentityChanged,NotSubmitted
 from .native import NativePublisher,NativeStopped,NativeUnknown,NativeTransient
 from .native_channel import NativeChromeChannel
+
+
+def local_error_details(error):
+    """Retain actionable location/codes, never exception text, locals or content."""
+    frames = [{'file':Path(f.filename).name, 'function':f.name, 'line':f.lineno}
+              for f in traceback.extract_tb(error.__traceback__)[-8:]]
+    detail = {'type':type(error).__name__, 'frames':frames}
+    for key in ('errno', 'winerror'):
+        if getattr(error, key, None) is not None:
+            detail[key] = getattr(error, key)
+    for source, target in (('filename','file'), ('filename2','destination')):
+        if getattr(error, source, None):
+            detail[target] = Path(str(getattr(error, source))).name
+    return detail
 
 
 @contextlib.contextmanager
@@ -73,29 +88,41 @@ class NativeRuntime:
             try:return self.publisher(account).check(account,account['native_binding'])
             except NativeStopped as ex:raise RetryablePreflight(str(ex)) from None
     def publish(self,account,payload,target):
-        with desktop_lock(self.config.home):
-            publisher=self.publisher(account,payload,target);entered=False
-            # Only a new article with no unresolved draft may replace yesterday's
-            # repurposed task tab. The existing tab and browser profile stay intact.
-            if hasattr(publisher,'ui') and payload.get('kind','thread')=='thread':
-                publisher.ui.preflight_replacement=True
-            reserve=publisher.before_submit
-            def mark_submission():
-                nonlocal entered
-                reserve();entered=True
-            publisher.before_submit=mark_submission
-            try:return publisher.publish(account,account['native_binding'],payload,target)
-            except NativeUnknown:raise
-            except NotSubmitted:raise
-            except NativeStopped as ex:
-                if entered:raise NativeUnknown('已进入提交边界，页面核验暂未完成；保留原回执，不自动重发') from ex
-                if isinstance(ex,NativeTransient):raise RetryablePreflight(str(ex)) from None
-                if '其他窗口遮挡目标控件' in str(ex):
-                    raise RetryablePreflight('窗口暂时遮挡发布控件，本次未提交；稍后重查') from None
-                raise PreflightStopped(str(ex)) from None
-            except Exception as ex:
-                if not entered:raise PreflightStopped('本机准备发生'+type(ex).__name__+'，尚未进入提交；原内容保留') from ex
-                raise
+        entered=False
+        try:
+            with desktop_lock(self.config.home):
+                publisher=self.publisher(account,payload,target)
+                # Only a new article with no unresolved draft may replace yesterday's
+                # repurposed task tab. The existing tab and browser profile stay intact.
+                if hasattr(publisher,'ui') and payload.get('kind','thread')=='thread':
+                    publisher.ui.preflight_replacement=True
+                reserve=publisher.before_submit
+                def mark_submission():
+                    nonlocal entered
+                    reserve();entered=True
+                publisher.before_submit=mark_submission
+                return publisher.publish(account,account['native_binding'],payload,target)
+        except (NativeUnknown,NotSubmitted):raise
+        except (RetryablePreflight,PreflightStopped,IdentityChanged) as ex:
+            if entered:raise NativeUnknown('已进入提交边界，保留原回执，不自动重发') from ex
+            raise
+        except NativeStopped as ex:
+            if entered:raise NativeUnknown('已进入提交边界，页面核验暂未完成；保留原回执，不自动重发') from ex
+            if isinstance(ex,NativeTransient):raise RetryablePreflight(str(ex)) from None
+            if '其他窗口遮挡目标控件' in str(ex):
+                raise RetryablePreflight('窗口暂时遮挡发布控件，本次未提交；稍后重查') from None
+            raise PreflightStopped(str(ex)) from None
+        except Exception as ex:
+            if entered:raise
+            detail=local_error_details(ex)
+            if isinstance(ex,PermissionError):
+                stage='保存浏览器任务状态' if any(f['file']=='native_channel.py' and f['function']=='save' for f in detail['frames']) else '本机准备'
+                codes='，'.join(str(detail[k]) for k in ('errno','winerror') if k in detail)
+                error=RetryablePreflight(stage+'暂不可访问（PermissionError'+('，错误码 '+codes if codes else '')+'），尚未提交；原稿保留，稍后重查')
+            else:
+                error=PreflightStopped('本机准备发生'+type(ex).__name__+'，尚未进入提交；原内容保留')
+            error.local_error=detail
+            raise error from ex
     def discover(self,account,terms):
         from .native_discovery import NativeDiscovery
         if account['platform'] not in ('tieba','juejin','zhihu'):raise PreflightStopped('此平台尚未接入本机原帖发现')

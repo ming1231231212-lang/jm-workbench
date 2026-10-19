@@ -5,6 +5,7 @@ import os
 import re
 import shutil
 import subprocess
+import tempfile
 import time
 from pathlib import Path
 from urllib.parse import urlsplit
@@ -56,10 +57,32 @@ class NativeChromeChannel:
         return result
 
     def save(self):
+        content = json.dumps(self.state, ensure_ascii=False)
+        # Snapshots normally return the same binding. Do not replace a file on
+        # every read: Windows readers can briefly deny rename/delete sharing.
+        if self.path.exists() and self.path.read_text(encoding='utf-8') == content:
+            return
         self.path.parent.mkdir(parents=True, exist_ok=True)
-        temp = self.path.with_suffix('.tmp')
-        temp.write_text(json.dumps(self.state, ensure_ascii=False), encoding='utf-8')
-        temp.replace(self.path)
+        temp = None
+        try:
+            with tempfile.NamedTemporaryFile(mode='w', encoding='utf-8',
+                    dir=self.path.parent, prefix=self.path.name+'.', suffix='.tmp', delete=False) as file:
+                temp = Path(file.name)
+                file.write(content)
+            for attempt in range(4):
+                try:
+                    temp.replace(self.path)
+                    return
+                except PermissionError:
+                    if attempt == 3:
+                        raise
+                    time.sleep(.1 * 2**attempt)
+        finally:
+            if temp is not None:
+                try:
+                    temp.unlink(missing_ok=True)
+                except OSError:
+                    pass  # Never mask the original failure or touch another writer's file.
 
     def record_navigation_mismatch(self, action, value):
         path=self.path.with_suffix('.navigation.json')
