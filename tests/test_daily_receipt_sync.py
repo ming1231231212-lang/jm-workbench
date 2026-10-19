@@ -146,13 +146,18 @@ def test_historical_post_counts_on_actual_send_day_without_moving_original_item(
     n[0]=datetime(2026,10,19,9,0,tzinfo=SHANGHAI).timestamp()
     with s.store.connect(True) as db:
         db.execute("UPDATE community_jobs SET state=?,started=?,updated=?,receipt=?",(outcome,n[0] if outcome=='submitted' else 0,n[0],json.dumps({'url':'https://tieba.baidu.com/p/1234567'})))
+        db.execute('INSERT INTO community_plan_checks VALUES(?,?,?,2,0)',(p,'2026-10-19',n[0]+1800))
     before=s.store.rows('SELECT * FROM community_jobs')
-    s.daily.sync_receipts(p);s.daily.sync_receipts(p);s.daily.prepare(p,force=True)
+    s.daily.sync_receipts(p);s.daily.sync_receipts(p)
+    assert s.store.rows('SELECT next_check FROM community_plan_checks WHERE plan_id=? AND day=?',(p,'2026-10-19'))[0]['next_check']==0
+    s.daily.prepare(p,force=True)
     state=s.daily.state()[0];today=next(d for d in state['days'] if d['day']=='2026-10-19')
     assert today['counts']['thread'][outcome]==1
     assert today['counts']['thread']['planned']==1
     assert today['counts']['reply']['planned']==0
     assert today['scheduled_counts']['thread']['planned']==0
+    assert today['next_check']==0
+    assert state['next_action_at']==datetime(2026,10,20,1,0,tzinfo=SHANGHAI).timestamp()
     assert s.store.rows('SELECT * FROM community_plan_items')==original
     assert s.store.rows('SELECT * FROM community_jobs')==before and not f.sent
     s.recover();assert next(d for d in s.daily.state()[0]['days'] if d['day']=='2026-10-19')['counts']==today['counts']

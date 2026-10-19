@@ -203,7 +203,7 @@ class DailyPlans:
                   AND ((j.state='submitted' AND j.started>=? AND j.started<?)
                    OR (j.state='recorded' AND j.updated>=? AND j.updated<?))""",
                 (a['id'],a['platform'],a['identity'],'manual:'+a['id'],midnight,midnight+86400,midnight,midnight+86400)))
-            linked=0;attributed=0
+            linked=0;attributed=0;completed={'thread':set(),'reply':set()}
             for row in rows:
                 receipt=json.loads(row['receipt'])
                 if not receipt.get('url'):continue
@@ -215,9 +215,12 @@ class DailyPlans:
                 payload=snapshot['payload'];kind=payload.get('kind','thread')
                 if kind not in ('thread','reply'):continue
                 linked+=db.execute('INSERT OR IGNORE INTO community_plan_items VALUES(?,?,?,?,?)',(ident,day,kind,material_id(payload['body']),row['post_id'])).rowcount
-                if db.execute('SELECT 1 FROM community_plan_items WHERE plan_id=? AND post_id=?',(ident,row['post_id'])).fetchone():attributed+=1
+                if db.execute('SELECT 1 FROM community_plan_items WHERE plan_id=? AND post_id=?',(ident,row['post_id'])).fetchone():
+                    attributed+=1;completed[kind].add(row['post_id'])
             if attributed:
                 db.execute("INSERT INTO community_plan_days VALUES(?,?,'planned','按当天实际发布回执统计；原计划日期保留在内容详情',?,?) ON CONFLICT(plan_id,day) DO UPDATE SET message=excluded.message,updated=excluded.updated",(ident,day,now,now))
+                if completed['thread'] and len(completed['reply'])>=p['payload'].get('replies_per_day',5):
+                    db.execute('UPDATE community_plan_checks SET next_check=0,attempts=0 WHERE plan_id=? AND day=?',(ident,day))
             return {'message':f'已将 {linked} 条当天真实回执关联到计划；没有新建或重复发布内容','linked':linked}
 
     def tick(self):
