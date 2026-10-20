@@ -91,3 +91,5 @@ planning-with-files记录持续计划；brainstorming梳理架构；find-skills�
 - 今日01:05:50失败，receipt.phase=preflight/submitted=false/started=0；通用PermissionError被runtime转为PreflightStopped，service自动暂停同平台计划。
 - 原生publish.json最后修改01:05:48，固定publish.tmp遗留01:05:50，二者SHA256完全相同；全部原生Python路径中，状态保存的temp.replace为该时刻最吻合的失败点。旧日志未保存异常堆栈，无法识别占用进程，不能声称已证明杀毒或其他程序。
 - raw每次只读快照也无条件重写相同状态，放大Windows替换文件遇占用的机会。需要无变化不写、唯一临时文件、短暂占用有限重试；提交前仍失败由队列退避，不暂停平台。
+
+2026-10-20最终验证：本机原任务标签已被用作本人主页，明确未提交后通过通道方法保留原页并新建任务页恢复原稿，未覆盖其他页面。文件占用修复已部署，原稿正常提交并回读成功。系统仍保护人工暂停、真实平台限制、身份变化和提交结果不明；未来自然日与公众可见性必须实测，不能由本次模拟替代。
