@@ -368,10 +368,11 @@ class DailyPlans:
                     db.execute("UPDATE community_plans SET state='paused',message=?,updated=? WHERE id=?",(message,self.s.clock(),ident))
                     db.execute("UPDATE community_jobs SET state='paused',message=? WHERE state='queued' AND post_id IN (SELECT post_id FROM community_plan_items WHERE plan_id=?)",(message,ident))
                 return {'message':message}
-            except Exception:
+            except Exception as ex:
                 attempts=(checks[0]['attempts'] if checks else 0)+1
                 delay=min(1800,300*2**min(attempts-1,3))
-                message=f'准备检查暂未完成，{delay//60}分钟后自动重查；请确认原账号Chrome登录状态'
+                detail=str(ex)[:200] if isinstance(ex,ValueError) else '本机准备检查未完成（'+type(ex).__name__+'）'
+                message=f'{detail}；{delay//60}分钟后自动重查'
                 with self.store.connect(True) as db:
                     db.execute('UPDATE community_plan_checks SET next_check=?,attempts=? WHERE plan_id=? AND day=?',(self.s.clock()+delay,attempts,ident,day))
                     db.execute("UPDATE community_plan_days SET state='waiting',message=?,updated=? WHERE plan_id=? AND day=?",(message,self.s.clock(),ident,day))

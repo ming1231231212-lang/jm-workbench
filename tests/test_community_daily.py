@@ -77,6 +77,14 @@ def test_revision_change_stops_daily_generation(ctx):
     p=setup_plan(ctx);s,_,_,_=ctx;s.cfg.code_revision='changed';s.daily.prepare(p)
     assert s.daily.get(p)['state']=='paused' and not s.state()['posts']
 
+def test_preparation_failure_keeps_specific_reason_and_enabled_retry(ctx,monkeypatch):
+    p=setup_plan(ctx);s,_,_,_=ctx
+    monkeypatch.setattr(s,'check_account',lambda *args:(_ for _ in ()).throw(ValueError('正文复制暂未完成，尚未提交')))
+    s.daily.prepare(p)
+    plan=s.daily.get(p)
+    assert plan['state']=='enabled' and '正文复制暂未完成' in plan['message']
+    assert '登录状态' not in plan['message'] and not s.state()['posts']
+
 
 def test_crash_during_preparation_resumes_committed_jobs_without_recreation(ctx):
     p=setup_plan(ctx);s,f,_,_=ctx;s.daily.prepare(p)

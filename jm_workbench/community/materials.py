@@ -41,6 +41,13 @@ class AutoMaterials:
             CREATE TABLE IF NOT EXISTS community_materials(id TEXT PRIMARY KEY,plan_id TEXT,day TEXT,kind TEXT,
               payload TEXT,fingerprint TEXT,created REAL,UNIQUE(plan_id,day,kind,payload));
             ''')
+        if isinstance(self.model,MaterialModel):
+            configured=self.model.config.values.get('community_model_name','nvidia/nemotron-3-super-120b-a12b:free')
+            for row in self.store.rows("SELECT data FROM community_preparations WHERE state='ready' ORDER BY updated DESC LIMIT 30"):
+                data=json.loads(row['data']);source=data.get('generation_model',{})
+                model=source.get('model','')
+                if data.get('review') and isinstance(model,str) and model.endswith(':free') and source.get('configured_model','nvidia/nemotron-3-super-120b-a12b:free')==configured:
+                    self.model.prefer_free_model(model);break
     def fingerprint(self,p):
         return hashlib.sha256(dumps([p['payload'],p['identity'],p['account_version'],p['revision']]).encode()).hexdigest()
     def active(self,p):
@@ -104,7 +111,16 @@ class AutoMaterials:
             day=local.date().isoformat()
             if d.get('start_date') and day<d['start_date']:continue
             if now<(due-timedelta(hours=1)).timestamp():continue
-            if self.prepare(p['id'],day).get('worked'):break # At most one bounded supply pass per tick.
+            if self.prepare(p['id'],day).get('worked'):return # At most one bounded supply pass per tick.
+        # Keep one day of posts in reserve; this never creates publication jobs.
+        # Current-day shortages take priority over tomorrow's inventory.
+        for row in self.store.rows("SELECT id FROM community_plans WHERE state='enabled'"):
+            p=self.s.daily.get(row['id']);d=p['payload'];day=local.date().isoformat()
+            if not self.active(p) or d.get('replies_per_day',5):continue
+            ready=next((r for r in self.state(p['id']) if r['day']==day and r['fingerprint']==self.fingerprint(p)),None)
+            if not ready or ready['state']!='ready':continue
+            tomorrow=(local.date()+timedelta(days=1)).isoformat()
+            if self.prepare(p['id'],tomorrow).get('worked'):return
     def request(self,ident):
         from .service import SHANGHAI
         p=self.s.daily.get(ident);now=self.s.clock();today=datetime.fromtimestamp(now,SHANGHAI).date()
@@ -136,16 +152,15 @@ class AutoMaterials:
         existing=self.store.rows('SELECT kind FROM community_plan_items WHERE plan_id=? AND day=?',(ident,day))
         missing={k:max(0,goal-sum(i['kind']==k for i in existing)-len(available[k])) for k,goal in [('thread',1),('reply',p['payload'].get('replies_per_day',5))]}
         attempts=(previous['attempts'] if previous and previous['fingerprint']==fp else 0)
-        if any(missing.values()) and attempts>=6 and not force:
-            message='今天准备已检查6轮，保留可用内容；明天继续准备'
-            with self.store.connect(True) as db:db.execute("UPDATE community_preparations SET state='waiting',message=?,next_check=? WHERE plan_id=? AND day=?",(message,now+86400,ident,day))
-            return {'message':message}
-        data={'counts':{k:len(available[k])+sum(i['kind']==k for i in existing) for k in missing},'sources':[],'review':''}
+        old_data=json.loads(previous['data']) if previous else {}
+        data={'counts':{k:len(available[k])+sum(i['kind']==k for i in existing) for k in missing},'sources':[],'review':'',
+              'attempt_history':old_data.get('attempt_history',[])[-29:]}
         message='已有素材满足当天1篇文章和评论目标' if p['payload'].get('replies_per_day',5) else '当天1篇文章素材已就绪；自动评论已关闭';state='ready';next_check=0
         if any(missing.values()):
             attempts+=1
             with self.store.connect(True) as db:
                 db.execute("INSERT INTO community_preparations VALUES(?,?,'preparing','正在读取相关活跃原帖并准备原创内容',?,?,?,?,?,?) ON CONFLICT(plan_id,day) DO UPDATE SET state='preparing',message=excluded.message,attempts=excluded.attempts,next_check=excluded.next_check,fingerprint=excluded.fingerprint,updated=excluded.updated",(ident,day,attempts,now+1800,fp,dumps(data),now,now))
+            stage='sources'
             try:
                 bodies,targets,claims=self.history(a)
                 # Include manual inventory so generated replies cannot preempt tomorrow's drafts.
@@ -163,12 +178,19 @@ class AutoMaterials:
                 data['sources']=candidates
                 if not self.active(self.s.daily.get(ident)) or self.fingerprint(self.s.daily.get(ident))!=fp:return {'message':'准备期间计划已变更，未保存或发送','worked':True}
                 if missing['thread'] or candidates:
-                    self.model.feedback=previous['message'] if previous and previous['state']=='waiting' else ''
+                    self.model.feedback=(data['attempt_history'][-1]['message'] if data['attempt_history'] else previous['message'] if previous and previous['state']=='waiting' else '')
+                    self.model.attempt_index=attempts-1;stage='generate'
                     raw=self.model.generate(a['platform'],day,candidates,bodies,bool(missing['thread']),missing['reply'],BRIEF)
+                    data['generation_model']=getattr(self.model,'last_call',{});stage='validate'
+                    article=raw.get('article') if isinstance(raw,dict) else None
+                    data['candidate_shape']={'article_type':type(article).__name__,
+                        'title_length':len(str(article.get('title',''))) if isinstance(article,dict) else 0,
+                        'body_length':len(str(article.get('body',''))) if isinstance(article,dict) else 0}
                     prepared,issues=validate_batch(raw,a['platform'],candidates,bodies,targets,bool(missing['thread']))
                     data['quality_notes']=issues
                     prepared['replies']=prepared['replies'][:missing['reply']]
-                    data['review']=self.model.review(a['platform'],prepared,candidates)
+                    stage='review';data['review']=self.model.review(a['platform'],prepared,candidates)
+                    data['review_model']=getattr(self.model,'last_call',{});stage='store'
                     current=self.s.daily.get(ident)
                     if not self.active(current) or self.fingerprint(current)!=fp:return {'message':'准备期间计划已变更，未保存或发送','worked':True}
                     with self.s.daily.lock,self.store.connect(True) as db:
@@ -179,15 +201,21 @@ class AutoMaterials:
                         for kind,values in [('thread',[prepared['article']] if prepared['article'] else []),('reply',prepared['replies'])]:
                             for value in values:db.execute('INSERT OR IGNORE INTO community_materials VALUES(?,?,?,?,?,?,?)',(uid(),ident,day,kind,dumps(value),fp,self.s.clock()))
                             missing[kind]=max(0,missing[kind]-len(values));data['counts'][kind]+=len(values)
+                    if isinstance(self.model,MaterialModel):
+                        model=data.get('generation_model',{}).get('model','')
+                        if isinstance(model,str) and model.endswith(':free'):self.model.prefer_free_model(model)
                 state='waiting' if any(missing.values()) else 'ready'
                 message=f"已准备文章 {min(data['counts']['thread'],1)}/1、评论 {min(data['counts']['reply'],p['payload'].get('replies_per_day',5))}/{p['payload'].get('replies_per_day',5)}"
                 if not p['payload'].get('replies_per_day',5):message=f"已准备文章 {min(data['counts']['thread'],1)}/1；自动评论已关闭"
                 if state=='waiting':message+=('；相关活跃原帖不足，稍后扩大查找，不填无关内容' if p['payload'].get('replies_per_day',5) else '；文章素材尚未通过检查，稍后继续准备')
             except Exception as ex:
                 state='waiting';message=str(ex)[:200] if isinstance(ex,ValueError) else '原帖读取或模型连接暂未完成，保留已有素材并稍后重查'
+            data['attempt_history'].append({'at':self.s.clock(),'attempt':attempts,'stage':stage,'state':state,'message':message})
             if state=='waiting':
                 next_check=self.s.clock()+min(7200,1800*2**min(attempts-1,2))
-                if attempts>=6:message+='；今天6轮已用完，明天继续准备'
+                message+='；'+str(int((next_check-self.s.clock())/60))+'分钟后继续检查当天缺口'
         with self.store.connect(True) as db:
             db.execute('INSERT INTO community_preparations VALUES(?,?,?,?,?,?,?,?,?,?) ON CONFLICT(plan_id,day) DO UPDATE SET state=excluded.state,message=excluded.message,attempts=excluded.attempts,next_check=excluded.next_check,fingerprint=excluded.fingerprint,data=excluded.data,updated=excluded.updated',(ident,day,state,message,attempts,next_check,fp,dumps(data),now,self.s.clock()))
+            if state=='ready' and day==local.isoformat():
+                db.execute('UPDATE community_plan_checks SET next_check=? WHERE plan_id=? AND day=? AND next_check>0',(self.s.clock(),ident,day))
         return {'message':message,'worked':any(missing.values()) or attempts>0}

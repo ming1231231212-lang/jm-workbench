@@ -4,6 +4,28 @@ import {parseRoute,navigation,overview} from '../jm_workbench/web/static/novice.
 import {pages} from '../jm_workbench/web/static/views.js';
 import {routeIcons} from '../jm_workbench/web/static/workspace.js';
 import {fetchWithDeadline} from '../jm_workbench/web/static/network.js';
+
+test('today exposes actual receipt and missing material even while executor is healthy',()=>{
+  const input={server_time:Date.parse('2026-10-21T10:00:00+08:00')/1000,
+    summary:{day:'2026-10-21',platforms:{tieba:{thread:1}}},executor:{status:'ready',message:'后台已就绪'},
+    accounts:[{id:'a',enabled:true,identity:'owner'},{id:'b',enabled:true,identity:'owner'}],
+    plans:[{id:'p',platform:'tieba',state:'enabled',payload:{name:'贴吧',account_id:'a',hour:1,minute:0,replies_per_day:0}},
+      {id:'q',platform:'zhihu',state:'enabled',payload:{name:'知乎',account_id:'b',hour:1,minute:0,replies_per_day:0,auto_prepare:true},
+       preparations:[{day:'2026-10-22',state:'ready',message:'明天已备稿'},
+         {day:'2026-10-21',state:'waiting',message:'免费模型HTTP404',next_check:1792551600}]}],
+    posts:[{id:'article',plan_id:'p',plan_day:'2026-10-20',payload:{kind:'thread',title:'跨天补发文章',body:'实际正文'},
+      jobs:[{id:'receipt',account_id:'a',platform:'tieba',state:'submitted',started:Date.parse('2026-10-21T01:04:00+08:00')/1000,
+        receipt:{url:'https://tieba.baidu.com/p/123456',visibility:'account_visible'}}]}]};
+  const html=overview(input);
+  assert.ok(html.includes('今日发布结果')&&html.includes('1 / 2'));
+  assert.ok(html.includes('本人页面已核验')&&html.includes('com-view')&&html.includes('article'));
+  assert.ok(html.includes('免费模型HTTP404')&&html.includes('今日未发布'));
+  assert.ok(html.includes('后台运行中，今日仍有 1 个平台未完成'));
+  assert.ok(html.includes('评论已关闭'));
+  input.plans[1].preparations[1].state='preparing';
+  input.plans[1].preparations[1].message='正在准备文章';
+  assert.ok(overview(input).includes('正在准备文章'));
+});
 test('first visit and old community links land on today; existing tool links survive',()=>{
   assert.deepEqual(parseRoute('',pages),{page:'community',tab:'overview'});
   assert.equal(parseRoute('#community/content',pages).tab,'content');

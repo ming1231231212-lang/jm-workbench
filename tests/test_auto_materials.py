@@ -90,14 +90,45 @@ def test_gates_block_generation_and_keep_old_results(supply,reason):
         else:db.execute("UPDATE community_plans SET state='paused' WHERE id=?",(p,))
     s.materials.tick();assert m.calls==0 and not s.state()['posts']
 
-def test_begin_date_hard_limit_and_six_read_rounds(supply):
+def test_begin_date_and_outage_recover_after_six_attempts_without_next_day_cutoff(supply):
     s,f,a,p,now,m=supply;now[0]-=86400
     s.materials.tick();assert m.calls==0
     now[0]+=86400
-    m.generate=lambda *args:(_ for _ in ()).throw(ValueError('模型未完成'))
+    generate=m.generate
+    m.generate=lambda *args:(_ for _ in ()).throw(ValueError('模型服务HTTP404'))
     for i in range(6):s.materials.prepare(p,'2026-10-15',force=True)
     s.materials.tick();assert s.materials.state(p)[0]['attempts']==6
+    r=s.materials.state(p)[0]
+    assert '404' in r['message'] and '明天' not in r['message']
+    assert len(r['data']['attempt_history'])==6
+    now[0]=r['next_check']+1;m.generate=generate
+    s.materials.tick();r=s.materials.state(p)[0]
+    assert r['state']=='ready' and r['attempts']==7
+    assert r['data']['attempt_history'][0]['message']=='模型服务HTTP404'
     assert not f.sent
+
+def test_posts_only_reserve_tomorrow_without_early_publication_or_comment_discovery(supply):
+    s,f,a,p,now,m=supply
+    s.daily.control(p,'pause');d=s.daily.get(p)['payload'];d.update(replies_per_day=0,hour=1)
+    s.daily.save(DailyPlan(**d),p);s.daily.control(p,'enable')
+    f.discover=lambda *args:pytest.fail('comments are disabled')
+    s.materials.tick();s.materials.tick();s.materials.tick()
+    assert m.calls==2
+    assert len(s.materials.pool(s.daily.get(p),'2026-10-16')['thread'])==1
+    s.daily.prepare(p)
+    assert len(s.state()['posts'])==1 and s.state()['posts'][0]['plan_day']=='2026-10-15'
+    assert not f.sent
+    # Restart on the next date, with the model unavailable: reserved draft survives.
+    from jm_workbench.community.materials import AutoMaterials
+    s.materials=AutoMaterials(s,model=m)
+    m.generate=lambda *args:(_ for _ in ()).throw(ValueError('模型服务HTTP503'))
+    now[0]=datetime(2026,10,16,0,59,tzinfo=SHANGHAI).timestamp()
+    s.materials.tick();s.daily.tick()
+    assert len(s.state()['posts'])==1
+    now[0]+=60;s.daily.tick();s.daily.tick()
+    posts=s.state()['posts']
+    assert len(posts)==2 and all(p['payload']['kind']=='thread' for p in posts)
+    assert {p['plan_day'] for p in posts}=={'2026-10-15','2026-10-16'}
 
 def test_changed_payload_invalidates_pool(supply):
     s,f,a,p,now,m=supply;s.materials.tick()
@@ -105,6 +136,16 @@ def test_changed_payload_invalidates_pool(supply):
     s.daily.control(p,'pause');d=s.daily.get(p)['payload'];d['search_terms']=['AI会议']
     s.daily.save(DailyPlan(**d),p);s.daily.control(p,'enable')
     assert not s.materials.pool(s.daily.get(p),'2026-10-15')['reply']
+
+@pytest.mark.parametrize('state,review,expected',[('ready','质检通过',True),('waiting','质检通过',False),('ready','',False)])
+def test_restart_reuses_only_a_quality_approved_free_model(supply,state,review,expected):
+    from jm_workbench.community.materials import AutoMaterials
+    s,f,a,p,now,m=supply;s.materials.tick()
+    data={'review':review,'generation_model':{'model':'verified-result:free'}}
+    with s.store.connect(True) as db:
+        db.execute('UPDATE community_preparations SET state=?,data=?',(state,json.dumps(data)))
+    restored=AutoMaterials(s)
+    assert bool(getattr(restored.model,'_validated_model',None)) is expected
 
 def test_prepare_button_is_nonblocking_and_tomorrow_is_not_published(supply):
     s,f,a,p,now,m=supply;now[0]-=86400
