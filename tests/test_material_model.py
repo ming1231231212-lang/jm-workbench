@@ -86,6 +86,25 @@ def test_only_quality_approved_free_model_can_be_preferred(tmp_path,monkeypatch)
     assert m.call('review',{})=={'approved':True}
     assert calls[0]['model']=='quality-checked:free'
 
+@pytest.mark.parametrize('suffix',['（AI辅助整理）','(AI辅助整理)'])
+def test_approved_url_is_separated_from_disclosure_before_link_validation(suffix):
+    from jm_workbench.community.material_quality import validate_generated
+    body='对照原始输入检查每一项输出，未在原文出现的信息单独标记，不补成确定事实。'*9
+    m=MaterialModel(SimpleNamespace(values={}),transport=lambda *args:{'article':{
+        'title':'核对输入和输出中的事实','body':body+'https://quzaoai.com/'+suffix,'platform_tags':['人工智能']},'replies':[]})
+    out=m.generate('zhihu','2026-10-21',[],[],True,0,'已核实事实')
+    assert 'https://quzaoai.com/\n'+suffix in out['article']['body']
+    assert validate_generated(out,'zhihu',[],[],set(),True)['article']
+
+@pytest.mark.parametrize('url',['https://quzaoai.com/secret','https://quzaoai.com.evil.example/','https://other.example/'])
+def test_disclosure_formatting_does_not_allow_other_urls(url):
+    from jm_workbench.community.material_quality import validate_generated
+    body='核对原始输入中的具体条件，逐项比较输出是否准确，保留来源与不确定内容。'*10
+    m=MaterialModel(SimpleNamespace(values={}),transport=lambda *args:{'article':{
+        'title':'核对输出中的关键条件','body':body+url+'（AI辅助整理）','platform_tags':['人工智能']},'replies':[]})
+    out=m.generate('zhihu','2026-10-21',[],[],True,0,'已核实事实')
+    with pytest.raises(ValueError,match='未授权链接'):validate_generated(out,'zhihu',[],[],set(),True)
+
 
 @pytest.mark.parametrize('platform,expected',[('juejin',['人工智能']),('zhihu',['人工智能','AI工具'])])
 def test_generated_tags_use_platform_verified_options(platform,expected):

@@ -87,6 +87,9 @@ class MaterialModel:
             if platform in ('juejin','zhihu') and not article.get('platform_tags'):article['platform_tags']=['人工智能']
             body=article['body']
             body=re.sub(r'^标题[:：][^\n]+\s*正文[:：]\s*','',body)
+            # Keep the authorized root URL separate from the adjacent AI disclosure.
+            # Other domains and paths still pass through the strict URL validator.
+            body=re.sub(r'(https://quzaoai\.com/)(?=[（(]AI\s*辅助整理[）)])',r'\1\n',body)
             if 'quzaoai.com' not in body:body+='\n\n我在维护趣造AI，欢迎一起使用、留下具体反馈，把它做成大家共同参与的网站。'+('quzaoai.com' if platform=='juejin' else 'https://quzaoai.com/')
             if not re.search(r'AI\s*辅助',body,re.I):body+='\n（AI辅助整理）'
             article['body']=body
